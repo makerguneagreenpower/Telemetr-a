@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "MGRT · MakerGunea Racing Team",
-  description: "Telemetría de MakerGunea Racing Team (MGRT). Coches F24 y F24+, GPS y rendimiento de pilotos.",
+  description: "Telemetría de MakerGunea Racing Team (MGRT). Dos coches en F24 y F24+, GPS y rendimiento de pilotos.",
   other: {
     "codex-preview": "development",
   },

@@ -1,6 +1,6 @@
 # MakerGunea Racing Team · MGRT
 
-Dos coches con sesiones independientes: F24 y F24+. El selector de coche filtra sesiones y pilotos. La importación guarda la categoría seleccionada. Las sesiones previas sin categoría se conservan como «Sin categoría»; no se les asigna un coche automáticamente.
+Dos coches físicos (Coche 1 y Coche 2, nombres provisionales) participan en ambas categorías. Cada jornada sigue este orden: entrenamientos F24+, carrera F24+, entrenamientos F24 y carrera F24. Cada fase admite sesiones de los dos coches. La importación guarda coche, categoría, tipo de sesión y fecha de jornada por separado. Los filtros y los ejemplos representan las ocho combinaciones de coche/fase. Las sesiones previas se conservan en «Sin clasificar»; no se inventa su coche, fecha o tipo.
 
 Panel en español con tema negro, rojo y blanco. Incluye portada, datos de ejemplo identificados, importación CSV/Excel/JSON, gráfico de velocidad GPS con media ponderada por tiempo, reproducción GPS, tabla y comparación de pilotos.
 
