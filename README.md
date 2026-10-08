@@ -8,9 +8,13 @@ Panel en español con tema negro, rojo y blanco. Incluye portada, datos de ejemp
 
 Node.js 22.13 o superior. Ejecuta `npm install` y `npm run dev`. `npm run db:generate` genera las migraciones; `npm run build` produce el Worker. El alojamiento provisiona D1 (`DB`) y R2 (`BUCKET`). Las muestras importadas se guardan en R2, con metadatos y propietario en D1. Cada cuenta solo puede consultar sus sesiones.
 
+## Meter datos
+
+La sección «Meter datos» ofrece documento o entrada manual. Ambos métodos crean una nueva sesión con fecha, coche y contexto. El documento se valida y muestra una vista previa antes de pulsar «Guardar sesión». La entrada manual permite añadir, editar y eliminar filas; los datos permanecen en el formulario si falla el guardado. Se utiliza la misma validación y almacenamiento D1/R2.
+
 ## Archivos
 
-Descarga la plantilla CSV desde «Importar sesión». Columnas obligatorias: `tiempo` (segundos desde inicio, único), `piloto`, `velocidad_gps` (km/h). Opcionales: `temperatura_motor`, `temperatura_bateria` (°C), `rpm_motor`, `rpm_rueda`, `latitud`, `longitud`. Máximo 5 MB y 10.000 muestras. CSV admite delimitador detectado automáticamente; Excel lee primera hoja; JSON acepta una lista o `{ "samples": [...] }`. El informe numérico no estima consumo eléctrico porque no se aportan corriente ni tensión.
+Descarga la plantilla CSV desde «Meter datos». Columnas obligatorias: `tiempo` (segundos desde inicio, único), `piloto`, `velocidad_gps` (km/h). Opcionales: `temperatura_motor`, `temperatura_bateria` (°C), `rpm_motor`, `rpm_rueda`, `latitud`, `longitud`. Máximo 5 MB y 10.000 muestras. CSV admite delimitador detectado automáticamente; Excel lee primera hoja; JSON acepta una lista o `{ "samples": [...] }`. El informe numérico no estima consumo eléctrico porque no se aportan corriente ni tensión.
 
 ## Funciones pendientes de conexión
 
