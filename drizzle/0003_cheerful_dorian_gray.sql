@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `session_context` text DEFAULT 'race-day';

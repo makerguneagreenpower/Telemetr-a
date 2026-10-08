@@ -1,6 +1,6 @@
 # MakerGunea Racing Team · MGRT
 
-Dos coches físicos (Coche 1 y Coche 2, nombres provisionales) participan en ambas categorías. Cada jornada sigue este orden: entrenamientos F24+, carrera F24+, entrenamientos F24 y carrera F24. Cada fase admite sesiones de los dos coches. La importación guarda coche, categoría, tipo de sesión y fecha de jornada por separado. Los filtros y los ejemplos representan las ocho combinaciones de coche/fase. Las sesiones previas se conservan en «Sin clasificar»; no se inventa su coche, fecha o tipo.
+Dos coches físicos (Coche 1 y Coche 2, nombres provisionales) participan en ambas categorías. Cada jornada sigue este orden: entrenamientos F24+, carrera F24+, entrenamientos F24 y carrera F24. Cada fase admite sesiones de los dos coches. La importación guarda coche, categoría, tipo de sesión y fecha de jornada por separado. Los filtros y los ejemplos representan las ocho combinaciones de coche/fase. La opción «Días de prácticas» permite registrar entrenamientos normales de cada coche por fecha, sin categoría F24/F24+ ni fases de carrera. El contexto de la sesión se guarda en D1; las sesiones anteriores conservan el contexto de jornada de carrera. Las sesiones previas se conservan en «Sin clasificar»; no se inventa su coche, fecha o tipo.
 
 Panel en español con tema negro, rojo y blanco. Incluye portada, datos de ejemplo identificados, importación CSV/Excel/JSON, gráfico de velocidad GPS con media ponderada por tiempo, reproducción GPS, tabla y comparación de pilotos.
 
