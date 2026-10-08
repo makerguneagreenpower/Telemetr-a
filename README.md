@@ -1,4 +1,6 @@
-# Greenpower · Telemetría
+# MakerGunea Racing Team · MGRT
+
+Dos coches con sesiones independientes: F24 y F24+. El selector de coche filtra sesiones y pilotos. La importación guarda la categoría seleccionada. Las sesiones previas sin categoría se conservan como «Sin categoría»; no se les asigna un coche automáticamente.
 
 Panel en español con tema negro, rojo y blanco. Incluye portada, datos de ejemplo identificados, importación CSV/Excel/JSON, gráfico de velocidad GPS con media ponderada por tiempo, reproducción GPS, tabla y comparación de pilotos.
 

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Greenpower · Telemetría",
-  description: "Panel de telemetría Greenpower: datos, GPS y rendimiento de pilotos.",
+  title: "MGRT · MakerGunea Racing Team",
+  description: "Telemetría de MakerGunea Racing Team (MGRT). Coches F24 y F24+, GPS y rendimiento de pilotos.",
   other: {
     "codex-preview": "development",
   },
