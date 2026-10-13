@@ -23,3 +23,7 @@ Descarga la plantilla CSV desde «Meter datos». Columnas obligatorias: `tiempo`
 - Telemetría en directo: el panel reproduce archivos y no tiene conexión con hardware. El mapa de demostración es un recorrido simulado, no un circuito real.
 
 El mapa base usa CARTO/OpenStreetMap; si la red falla, el recorrido sigue visible. Los datos privados no se guardan en localStorage. El sitio se publica privado por defecto.
+
+## Consultar datos
+
+La vista inicial «Resumen general» muestra solo la tabla de la sesión. «Coche · componentes» usa una imagen de referencia generada con zonas pulsables y un menú de tres puntos para abrir Motor (temperatura y rpm), Baterías (temperatura), Ruedas (rpm) y GPS (velocidad y mapa). La selección de coche, jornada, sesión y piloto se conserva al pasar de un componente a otro. La imagen no es una fotografía de los coches reales de MGRT.
