@@ -27,3 +27,7 @@ El mapa base usa CARTO/OpenStreetMap; si la red falla, el recorrido sigue visibl
 ## Consultar datos
 
 La vista inicial «Resumen general» muestra solo la tabla de la sesión. «Coche · componentes» usa una imagen de referencia generada con zonas pulsables y un menú de tres puntos para abrir Motor (temperatura y rpm), Baterías (temperatura), Ruedas (rpm) y GPS (velocidad y mapa). La selección de coche, jornada, sesión y piloto se conserva al pasar de un componente a otro. La imagen no es una fotografía de los coches reales de MGRT.
+
+## Cuenta, pilotos y carreras
+
+/acceso proporciona el acceso real con ChatGPT y cierre de sesión; Google sigue pendiente. Eliminar un piloto desactiva su nombre en el listado de la cuenta mediante D1, sin borrar ni anonimizar las muestras históricas. Cada gráfico incluye una tabla compacta de muestras cercanas a la seleccionada. /carreras muestra todas las sesiones de jornadas de carrera (entrenamientos incluidos), ordenadas por fecha descendente y fases F24+/F24. El archivo pagina metadatos y recupera cada documento completo al abrirlo; permite descargarlos como JSON. Cada consulta y eliminación requiere identidad y comprueba el propietario.

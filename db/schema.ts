@@ -1,2 +1,3 @@
 import {sqliteTable,text} from 'drizzle-orm/sqlite-core';
 export const sessions=sqliteTable('sessions',{id:text('id').primaryKey(),owner:text('owner').notNull(),name:text('name').notNull(),createdAt:text('created_at').notNull(),objectKey:text('object_key').notNull(),carCategory:text('car_category'),carId:text('car_id'),sessionType:text('session_type'),eventDate:text('event_date'),sessionContext:text('session_context').default('race-day')});
+export const removedPilots=sqliteTable('removed_pilots',{id:text('id').primaryKey(),owner:text('owner').notNull(),name:text('name').notNull(),removedAt:text('removed_at').notNull()});
