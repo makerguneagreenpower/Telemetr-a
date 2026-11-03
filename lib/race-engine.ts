@@ -1,5 +1,5 @@
 import type { CarId } from './telemetry';
-import { LAP_DISTANCE_METRES, trackPoint } from './race-track';
+import { DEMO_TRACK, type CircuitRuntime } from './circuits';
 
 export type RaceVehicle = {
     id: CarId; distance: number; speed: number; acceleration: number;
@@ -12,28 +12,29 @@ export const FIXED_STEP = 1 / 60;
 const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(high, v));
 const angle = (v: number) => Math.atan2(Math.sin(v), Math.cos(v));
 
-export function createRaceWorld(): RaceWorld {
+export function createRaceWorld(track: CircuitRuntime = DEMO_TRACK): RaceWorld {
     const car = (id: CarId, distance: number, lane: number): RaceVehicle => ({
         id, distance, lane, speed: 0, acceleration: 0, steering: 0, throttle: 0, brake: 0,
         motorTemp: 35, batteryTemp: 26, consumptionWh: 0, powerW: 0,
         lapStarted: 0, lastLap: null, bestLap: null,
     });
-    return { elapsed: 0, cars: [car('car-1', 3.2, -.9), car('car-2', 0, .9)] };
+    const lane = Math.min(.9, track.width * .19);
+    return { elapsed: 0, cars: [car('car-1', 3.2, -lane), car('car-2', 0, lane)] };
 }
 
 // Simplified physics, not a validated model of an actual F24 car.
 // Distance, animation, lap timing and Wh all come from this one simulation clock.
-export function stepRace(world: RaceWorld, delta = FIXED_STEP): RaceWorld {
+export function stepRace(world: RaceWorld, delta = FIXED_STEP, track: CircuitRuntime = DEMO_TRACK): RaceWorld {
     const dt = clamp(delta, 0, .05);
     if (!dt) return world;
     const elapsed = world.elapsed + dt;
     const cars = world.cars.map((car, index): RaceVehicle => {
-        const progress = car.distance / LAP_DISTANCE_METRES;
-        const here = trackPoint(progress), ahead = trackPoint(progress + .016);
-        const curvature = Math.abs(angle(ahead.heading - here.heading)) / (.016 * LAP_DISTANCE_METRES);
+        const progress = car.distance / track.length;
+        const here = track.point(progress), ahead = track.point(progress + 9 / track.length);
+        const curvature = Math.abs(angle(ahead.heading - here.heading)) / 9;
         const cornerSpeed = Math.sqrt(3.0 / Math.max(curvature, .001));
         const strategy = 1 + .075 * Math.sin(elapsed / 18 + index * Math.PI);
-        const targetSpeed = clamp(Math.min(13.1, cornerSpeed) * strategy, 6.5, 14.1);
+        const targetSpeed = clamp(Math.min(13.1, cornerSpeed) * strategy, 2.5, 14.1);
         const mass = index ? 112 : 108;
         const drag = 12 + .18 * car.speed * car.speed;
         const availableForce = (index ? 565 : 550) * .82 / Math.max(2, car.speed);
@@ -42,12 +43,12 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP): RaceWorld {
         const speed = Math.max(0, car.speed + acceleration * dt);
         const distance = car.distance + (car.speed + speed) * .5 * dt;
         const powerW = Math.max(0, (mass * acceleration + drag) * speed) / .82 + 12;
-        const completed = Math.floor(distance / LAP_DISTANCE_METRES) > Math.floor(car.distance / LAP_DISTANCE_METRES);
+        const completed = Math.floor(distance / track.length) > Math.floor(car.distance / track.length);
         const lapTime = elapsed - car.lapStarted;
         const turn = angle(ahead.heading - here.heading);
         return {
             ...car, distance, speed, acceleration, powerW,
-            lane: (index ? .9 : -.9) - clamp(turn, -.5, .5) * .4,
+            lane: (index ? 1 : -1) * Math.min(.9, track.width * .19) - clamp(turn, -.5, .5) * .4,
             steering: clamp(turn * 5, -1, 1),
             throttle: clamp((mass * Math.max(0, acceleration) + drag) / Math.max(1, availableForce), 0, 1),
             brake: clamp(-acceleration / 2.6, 0, 1),
@@ -62,8 +63,8 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP): RaceWorld {
     return { elapsed, cars };
 }
 
-export function vehiclePose(car: RaceVehicle) {
-    const point = trackPoint(car.distance / LAP_DISTANCE_METRES);
+export function vehiclePose(car: RaceVehicle, track: CircuitRuntime = DEMO_TRACK) {
+    const point = track.point(car.distance / track.length);
     return { x: point.x + Math.cos(point.heading) * car.lane, z: point.z - Math.sin(point.heading) * car.lane, heading: point.heading };
 }
 

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { trackPoint } from './race-track';
+import { DEMO_TRACK, type CircuitRuntime } from './circuits';
 import { vehiclePose, type RaceWorld } from './race-engine';
 
 export type RaceCamera = 'duel' | 'car-1' | 'car-2' | 'aerial';
 
-export function createRaceScene(canvas: HTMLCanvasElement) {
+export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime = DEMO_TRACK) {
+    const trackPoint = track.point, roadWidth = track.width / 2, barrier = roadWidth + 4, segmentCount = track.samples;
+    const extent = Math.max(160, track.bounds.span);
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -13,8 +15,8 @@ export function createRaceScene(canvas: HTMLCanvasElement) {
     renderer.shadowMap.type = THREE.PCFShadowMap;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#bdd8e6');
-    scene.fog = new THREE.Fog('#c3d6d5', 110, 340);
-    const camera = new THREE.PerspectiveCamera(52, 16 / 9, .08, 650);
+    scene.fog = new THREE.Fog('#c3d6d5', Math.max(110, extent * .5), Math.max(340, extent * 2));
+    const camera = new THREE.PerspectiveCamera(52, 16 / 9, .08, Math.max(650, extent * 5));
     scene.add(new THREE.HemisphereLight('#deedff', '#65704b', 2.2));
     const sun = new THREE.DirectionalLight('#fff3d8', 3.1);
     sun.castShadow = true;
@@ -36,7 +38,7 @@ export function createRaceScene(canvas: HTMLCanvasElement) {
     function tube(parent: THREE.Object3D, points: number[][], radius: number, mat: THREE.Material) {
         return mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p as [number, number, number]))), 24, radius, 6, false), mat, parent);
     }
-    const ground = mesh(new THREE.PlaneGeometry(650, 650), grass, scene, 0, -.025, 0); ground.rotation.x = -Math.PI / 2; ground.castShadow = false;
+    const ground = mesh(new THREE.PlaneGeometry(extent + 350, extent + 350), grass, scene, 0, -.025, 0); ground.rotation.x = -Math.PI / 2; ground.castShadow = false;
     // Procedural surfaces are generated locally; the scene has no external asset requests.
     function noiseTexture(base: number, spread: number) {
         const tile = document.createElement('canvas'); tile.width = tile.height = 128;
@@ -46,43 +48,53 @@ export function createRaceScene(canvas: HTMLCanvasElement) {
         ctx.putImageData(pixels, 0, 0);
         const texture = new THREE.CanvasTexture(tile); texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.colorSpace = THREE.SRGBColorSpace; return texture;
     }
-    grass.map = noiseTexture(190, 45); grass.map.repeat.set(90, 90);
+    grass.map = noiseTexture(190, 45); grass.map.repeat.set((extent + 350) / 7, (extent + 350) / 7);
     asphalt.map = noiseTexture(200, 40);
 
     function ribbon(left: number, right: number, y: number, mat: THREE.Material, striped = false) {
         const vertices: number[] = [], indices: number[] = [], colors: number[] = [], uv: number[] = [];
-        for (let i = 0; i <= 720; i++) {
-            const p = trackPoint(i / 720), nx = Math.cos(p.heading), nz = -Math.sin(p.heading);
+        for (let i = 0; i <= segmentCount; i++) {
+            const p = trackPoint(i / segmentCount), nx = Math.cos(p.heading), nz = -Math.sin(p.heading);
             for (const offset of [left, right]) { vertices.push(p.x + nx * offset, y, p.z + nz * offset); uv.push(offset * .6, i * .5); const color = new THREE.Color(Math.floor(i / 3) % 2 ? '#eeebe3' : '#c62c3c'); colors.push(color.r, color.g, color.b); }
-            if (i < 720) { const a = i * 2; indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+            if (i < segmentCount) { const a = i * 2; indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
         }
         const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(indices); geo.computeVertexNormals();
         if (striped) geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         const road = mesh(geo, mat, scene); road.castShadow = false; return road;
     }
-    ribbon(-4.1, 4.1, .01, asphalt);
+    ribbon(-roadWidth, roadWidth, .01, asphalt);
     const curb = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 });
-    ribbon(-4.7, -4.1, .025, curb, true); ribbon(4.1, 4.7, .025, curb, true);
-    ribbon(-3.94, -3.84, .018, white); ribbon(3.84, 3.94, .018, white);
-    ribbon(-8.2, -8, .7, metal); ribbon(8, 8.2, .7, metal);
-    const start = trackPoint(0);
-    for (let row = 0; row < 2; row++) for (let col = 0; col < 16; col++) {
-        const offset = -4 + (col + .5) * .5;
-        const square = box(scene, (row + col) % 2 ? white : dark, start.x + Math.cos(start.heading) * offset + Math.sin(start.heading) * row * .4, .023, start.z - Math.sin(start.heading) * offset + Math.cos(start.heading) * row * .4, .5, .01, .4); square.rotation.y = start.heading; square.castShadow = false;
+    ribbon(-roadWidth-.6, -roadWidth, .025, curb, true); ribbon(roadWidth, roadWidth+.6, .025, curb, true);
+    ribbon(-roadWidth+.16, -roadWidth+.26, .018, white); ribbon(roadWidth-.26, roadWidth-.16, .018, white);
+    ribbon(-barrier-.1, -barrier+.1, .7, metal); ribbon(barrier-.1, barrier+.1, .7, metal);
+    const start = trackPoint(0), columns = Math.ceil(track.width * 2), cellWidth = track.width / columns;
+    for (let row = 0; row < 2; row++) for (let col = 0; col < columns; col++) {
+        const offset = -roadWidth + (col + .5) * cellWidth;
+        const square = box(scene, (row + col) % 2 ? white : dark, start.x + Math.cos(start.heading) * offset + Math.sin(start.heading) * row * .4, .023, start.z - Math.sin(start.heading) * offset + Math.cos(start.heading) * row * .4, cellWidth, .01, .4); square.rotation.y = start.heading; square.castShadow = false;
+    }
+    function clearOfRoad(x: number, z: number, margin: number) {
+        const limit=(roadWidth+margin)**2;
+        for(let i=1;i<track.outline.length;i++){
+            const a=track.outline[i-1],b=track.outline[i],dx=b.x-a.x,dz=b.z-a.z;
+            const ratio=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz||1)));
+            if((x-a.x-dx*ratio)**2+(z-a.z-dz*ratio)**2<limit)return false;
+        }
+        return true;
     }
     // Instanced scenery keeps the two-car scene light enough for laptops.
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.18, .27, 2.5, 6), material('#75654c'), 96);
     const crowns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), material('#4d7046', 1), 96);
     const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion();
     for (let i = 0; i < 96; i++) {
-        const p = trackPoint(i / 96), side = i % 2 ? 1 : -1, offset = side * (16 + (i * 17 % 19)), x = p.x + Math.cos(p.heading) * offset, z = p.z - Math.sin(p.heading) * offset;
-        matrix.compose(new THREE.Vector3(x, 1.25, z), rotation, new THREE.Vector3(1, 1, 1)); trunks.setMatrixAt(i, matrix);
-        matrix.compose(new THREE.Vector3(x, 4.4, z), rotation, new THREE.Vector3(2 + i % 3 * .4, 3 + i % 4 * .3, 2.2)); crowns.setMatrixAt(i, matrix);
+        const p = trackPoint(i / 96), side = i % 2 ? 1 : -1, offset = side * (roadWidth + 12 + (i * 17 % 19)), x = p.x + Math.cos(p.heading) * offset, z = p.z - Math.sin(p.heading) * offset;
+        const visible=clearOfRoad(x,z,3)?1:0;
+        matrix.compose(new THREE.Vector3(x, 1.25, z), rotation, new THREE.Vector3(visible,visible,visible)); trunks.setMatrixAt(i, matrix);
+        matrix.compose(new THREE.Vector3(x, 4.4, z), rotation, new THREE.Vector3(visible*(2 + i % 3 * .4), visible*(3 + i % 4 * .3), visible*2.2)); crowns.setMatrixAt(i, matrix);
     }
     scene.add(trunks, crowns);
     const post = new THREE.InstancedMesh(new THREE.CylinderGeometry(.055, .055, 1, 5), metal, 144);
-    for (let i = 0; i < 144; i++) { const p = trackPoint(Math.floor(i / 2) / 72), offset = i % 2 ? 8.1 : -8.1; matrix.makeTranslation(p.x + Math.cos(p.heading) * offset, .5, p.z - Math.sin(p.heading) * offset); post.setMatrixAt(i, matrix); } scene.add(post);
-    const pit = new THREE.Group(); pit.position.set(start.x + Math.cos(start.heading) * 16, 0, start.z - Math.sin(start.heading) * 16); pit.rotation.y = start.heading; scene.add(pit);
+    for (let i = 0; i < 144; i++) { const p = trackPoint(Math.floor(i / 2) / 72), offset = i % 2 ? barrier : -barrier; matrix.makeTranslation(p.x + Math.cos(p.heading) * offset, .5, p.z - Math.sin(p.heading) * offset); post.setMatrixAt(i, matrix); } scene.add(post);
+    const pit = new THREE.Group(); pit.position.set(start.x + Math.cos(start.heading) * (roadWidth + 12), 0, start.z - Math.sin(start.heading) * (roadWidth + 12)); pit.rotation.y = start.heading; pit.visible=clearOfRoad(pit.position.x,pit.position.z,13); scene.add(pit);
     box(pit, material('#d1d4cc'), 0, 2.4, 0, 7, 4.8, 22); box(pit, dark, 0, 4.9, 0, 7.5, .3, 23);
     for (let i = 0; i < 5; i++) box(pit, dark, -3.51, 1.5, -8 + i * 4, .04, 2.5, 3.3);
     box(pit, red, -3.56, 4.3, 0, .06, .3, 22);
@@ -126,10 +138,10 @@ export function createRaceScene(canvas: HTMLCanvasElement) {
             const width = Math.max(1, canvas.clientWidth), height = Math.max(1, canvas.clientHeight), ratio = Math.min(window.devicePixelRatio || 1, 1.5);
             const w = Math.min(1800, Math.round(width * ratio)), h = Math.round(height * w / width);
             if (canvas.width !== w || canvas.height !== h) { renderer.setSize(w,h,false); camera.aspect=width/height; camera.updateProjectionMatrix(); }
-            const poses = world.cars.map(vehiclePose);
+            const poses = world.cars.map(car => vehiclePose(car, track));
             models.forEach((model, index) => { const car=world.cars[index], pose=poses[index]; model.group.position.set(pose.x, Math.sin(car.distance*3)*.004, pose.z); model.group.rotation.set(-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015); model.wheels.forEach(wheel=>wheel.rotation.x=car.distance/.274); });
             const center = new THREE.Vector3((poses[0].x+poses[1].x)/2,0,(poses[0].z+poses[1].z)/2);
-            if (mode === 'aerial') { desired.set(80,175,115); target.set(0,0,0); }
+            if (mode === 'aerial') { desired.set(extent*.55,extent*1.15,extent*.75); target.set(0,0,0); }
             else if (mode === 'car-1' || mode === 'car-2') {
                 const p=poses[mode==='car-1'?0:1], forward=new THREE.Vector3(Math.sin(p.heading),0,Math.cos(p.heading));
                 desired.set(p.x,1.15,p.z).addScaledVector(forward,.10); target.set(p.x,1.05,p.z).addScaledVector(forward,20);
