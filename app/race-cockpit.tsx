@@ -7,7 +7,7 @@ const lapClock = (seconds: number | null) => seconds === null ? '—' : `${Math.
 
 export default function RaceCockpit({ car, elapsed, track }: { car: RaceVehicle; elapsed: number; track: CircuitRuntime }) {
     const speed = car.speed * 3.6, rpm = Math.round(car.speed * 3.6 * 64);
-    const progress = (car.distance % track.length) / track.length;
+    const progress = (car.distance % track.length) / track.length, here = track.point(progress);
     return <section className="panel race-car-instruments" aria-label={`Instrumentación simulada de ${car.id === 'car-1' ? 'Coche 1' : 'Coche 2'}`}>
         <div className="race-instruments-hud">
             <div className="hud-gauge"><Dial value={speed} maximum={60} label="km/h" alert={speed > 40} /><span className="hud-gauge-caption">VELOCIDAD</span></div>
@@ -16,7 +16,7 @@ export default function RaceCockpit({ car, elapsed, track }: { car: RaceVehicle;
             <div className="hud-gauge"><Dial value={rpm} maximum={4000} label="×1000 rpm" alert={false} /><span className="hud-gauge-caption">MOTOR · {rpm.toLocaleString('es-ES')} RPM SIM.</span></div>
         </div>
         <div className="race-track-progress"><span>Progreso de vuelta</span><strong>{Math.floor(progress * 100)} %</strong><progress max={1} value={progress} aria-label="Progreso de vuelta del coche" /></div>
-        <div className="race-track-facts"><div><span>Vuelta actual</span><strong>{lapClock(elapsed - car.lapStarted)}</strong></div><div><span>Última vuelta</span><strong>{lapClock(car.lastLap)}</strong></div><div><span>Mejor vuelta</span><strong>{lapClock(car.bestLap)}</strong></div></div>
+        <div className="race-track-facts"><div><span>Vuelta actual</span><strong>{lapClock(elapsed - car.lapStarted)}</strong></div><div><span>Última vuelta</span><strong>{lapClock(car.lastLap)}</strong></div><div><span>Mejor vuelta</span><strong>{lapClock(car.bestLap)}</strong></div>{track.elevation.hasElevation&&<div><span>Pendiente · altura</span><strong>{`${here.grade>.005?'▲':here.grade<-.005?'▼':''} ${(here.grade*100).toLocaleString('es-ES',{maximumFractionDigits:1})} % · ${here.y.toLocaleString('es-ES',{maximumFractionDigits:1})} m`}</strong></div>}</div>
         <p className="race-media-note">Dos baterías traseras · {Math.round(car.powerW)} W de potencia eléctrica simulada · mismo reloj que la escena 3D.</p>
     </section>;
 }

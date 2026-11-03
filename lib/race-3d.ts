@@ -38,7 +38,26 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
     function tube(parent: THREE.Object3D, points: number[][], radius: number, mat: THREE.Material) {
         return mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p as [number, number, number]))), 24, radius, 6, false), mat, parent);
     }
-    const ground = mesh(new THREE.PlaneGeometry(extent + 350, extent + 350), grass, scene, 0, -.025, 0); ground.rotation.x = -Math.PI / 2; ground.castShadow = false;
+    // Terrain height: hugs the road just beside the track, then drops on an embankment to the valley floor
+    // (the lap's lowest altitude), so raised sections read clearly as climbs and crests in 3D.
+    const terrainSamples = track.outline.filter((_, i) => i % Math.max(1, Math.floor(track.outline.length / 300)) === 0);
+    const meanAltitude = terrainSamples.reduce((sum, p) => sum + p.y, 0) / terrainSamples.length;
+    function heightAt(x: number, z: number) {
+        if (!track.elevation.hasElevation) return 0;
+        let best = Infinity, y = 0;
+        for (const p of terrainSamples) { const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } }
+        const distance = Math.sqrt(best), near = barrier + 1.5, far = near + Math.max(6, y * 2.2);
+        const t = Math.max(0, Math.min(1, (distance - near) / (far - near))), blend = t * t * (3 - 2 * t);
+        return y * (1 - blend);
+    }
+    const groundSize = extent + 350, groundSegments = track.elevation.hasElevation ? 260 : 1;
+    const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize, groundSegments, groundSegments); groundGeometry.rotateX(-Math.PI / 2);
+    if (track.elevation.hasElevation) {
+        const position = groundGeometry.attributes.position;
+        for (let i = 0; i < position.count; i++) position.setY(i, heightAt(position.getX(i), position.getZ(i)) - .12);
+        groundGeometry.computeVertexNormals();
+    }
+    const ground = mesh(groundGeometry, grass, scene, 0, -.025, 0); ground.castShadow = false;
     // Procedural surfaces are generated locally; the scene has no external asset requests.
     function noiseTexture(base: number, spread: number) {
         const tile = document.createElement('canvas'); tile.width = tile.height = 128;
@@ -55,7 +74,7 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
         const vertices: number[] = [], indices: number[] = [], colors: number[] = [], uv: number[] = [];
         for (let i = 0; i <= segmentCount; i++) {
             const p = trackPoint(i / segmentCount), nx = Math.cos(p.heading), nz = -Math.sin(p.heading);
-            for (const offset of [left, right]) { vertices.push(p.x + nx * offset, y, p.z + nz * offset); uv.push(offset * .6, i * .5); const color = new THREE.Color(Math.floor(i / 3) % 2 ? '#eeebe3' : '#c62c3c'); colors.push(color.r, color.g, color.b); }
+            for (const offset of [left, right]) { vertices.push(p.x + nx * offset, p.y + y, p.z + nz * offset); uv.push(offset * .6, i * .5); const color = new THREE.Color(Math.floor(i / 3) % 2 ? '#eeebe3' : '#c62c3c'); colors.push(color.r, color.g, color.b); }
             if (i < segmentCount) { const a = i * 2; indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
         }
         const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(indices); geo.computeVertexNormals();
@@ -70,7 +89,7 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
     const start = trackPoint(0), columns = Math.ceil(track.width * 2), cellWidth = track.width / columns;
     for (let row = 0; row < 2; row++) for (let col = 0; col < columns; col++) {
         const offset = -roadWidth + (col + .5) * cellWidth;
-        const square = box(scene, (row + col) % 2 ? white : dark, start.x + Math.cos(start.heading) * offset + Math.sin(start.heading) * row * .4, .023, start.z - Math.sin(start.heading) * offset + Math.cos(start.heading) * row * .4, cellWidth, .01, .4); square.rotation.y = start.heading; square.castShadow = false;
+        const square = box(scene, (row + col) % 2 ? white : dark, start.x + Math.cos(start.heading) * offset + Math.sin(start.heading) * row * .4, start.y + .023, start.z - Math.sin(start.heading) * offset + Math.cos(start.heading) * row * .4, cellWidth, .01, .4); square.rotation.y = start.heading; square.castShadow = false;
     }
     function clearOfRoad(x: number, z: number, margin: number) {
         const limit=(roadWidth+margin)**2;
@@ -87,20 +106,22 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
     const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion();
     for (let i = 0; i < 96; i++) {
         const p = trackPoint(i / 96), side = i % 2 ? 1 : -1, offset = side * (roadWidth + 12 + (i * 17 % 19)), x = p.x + Math.cos(p.heading) * offset, z = p.z - Math.sin(p.heading) * offset;
-        const visible=clearOfRoad(x,z,3)?1:0;
-        matrix.compose(new THREE.Vector3(x, 1.25, z), rotation, new THREE.Vector3(visible,visible,visible)); trunks.setMatrixAt(i, matrix);
-        matrix.compose(new THREE.Vector3(x, 4.4, z), rotation, new THREE.Vector3(visible*(2 + i % 3 * .4), visible*(3 + i % 4 * .3), visible*2.2)); crowns.setMatrixAt(i, matrix);
+        const visible=clearOfRoad(x,z,3)?1:0, base=heightAt(x,z);
+        matrix.compose(new THREE.Vector3(x, base + 1.1, z), rotation, new THREE.Vector3(visible,visible,visible)); trunks.setMatrixAt(i, matrix);
+        matrix.compose(new THREE.Vector3(x, base + 4.25, z), rotation, new THREE.Vector3(visible*(2 + i % 3 * .4), visible*(3 + i % 4 * .3), visible*2.2)); crowns.setMatrixAt(i, matrix);
     }
     scene.add(trunks, crowns);
     const post = new THREE.InstancedMesh(new THREE.CylinderGeometry(.055, .055, 1, 5), metal, 144);
-    for (let i = 0; i < 144; i++) { const p = trackPoint(Math.floor(i / 2) / 72), offset = i % 2 ? barrier : -barrier; matrix.makeTranslation(p.x + Math.cos(p.heading) * offset, .5, p.z - Math.sin(p.heading) * offset); post.setMatrixAt(i, matrix); } scene.add(post);
-    const pit = new THREE.Group(); pit.position.set(start.x + Math.cos(start.heading) * (roadWidth + 12), 0, start.z - Math.sin(start.heading) * (roadWidth + 12)); pit.rotation.y = start.heading; pit.visible=clearOfRoad(pit.position.x,pit.position.z,13); scene.add(pit);
+    for (let i = 0; i < 144; i++) { const p = trackPoint(Math.floor(i / 2) / 72), offset = i % 2 ? barrier : -barrier; matrix.makeTranslation(p.x + Math.cos(p.heading) * offset, p.y + .5, p.z - Math.sin(p.heading) * offset); post.setMatrixAt(i, matrix); } scene.add(post);
+    const pitX = start.x + Math.cos(start.heading) * (roadWidth + 12), pitZ = start.z - Math.sin(start.heading) * (roadWidth + 12);
+    const pit = new THREE.Group(); pit.position.set(pitX, heightAt(pitX, pitZ) - .2, pitZ); pit.rotation.y = start.heading; pit.visible=clearOfRoad(pit.position.x,pit.position.z,13); scene.add(pit);
     box(pit, material('#d1d4cc'), 0, 2.4, 0, 7, 4.8, 22); box(pit, dark, 0, 4.9, 0, 7.5, .3, 23);
     for (let i = 0; i < 5; i++) box(pit, dark, -3.51, 1.5, -8 + i * 4, .04, 2.5, 3.3);
     box(pit, red, -3.56, 4.3, 0, .06, .3, 22);
 
     function makeCar(index: number) {
-        const group = new THREE.Group(); scene.add(group);
+        // Yaw first, then pitch/roll in the car's own frame so slopes tilt the nose correctly at any heading.
+        const group = new THREE.Group(); group.rotation.order = 'YXZ'; scene.add(group);
         const paint = index ? red : white;
         const body = mesh(new THREE.SphereGeometry(1, 32, 16), paint, group, 0, .36, .03); body.scale.set(.46, .30, 1.62);
         const nose = mesh(new THREE.SphereGeometry(1, 24, 12), paint, group, 0, .35, 1.07); nose.scale.set(.31, .22, .78);
@@ -139,12 +160,12 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
             const w = Math.min(1800, Math.round(width * ratio)), h = Math.round(height * w / width);
             if (canvas.width !== w || canvas.height !== h) { renderer.setSize(w,h,false); camera.aspect=width/height; camera.updateProjectionMatrix(); }
             const poses = world.cars.map(car => vehiclePose(car, track));
-            models.forEach((model, index) => { const car=world.cars[index], pose=poses[index]; model.group.position.set(pose.x, Math.sin(car.distance*3)*.004, pose.z); model.group.rotation.set(-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015); model.wheels.forEach(wheel=>wheel.rotation.x=car.distance/.274); });
-            const center = new THREE.Vector3((poses[0].x+poses[1].x)/2,0,(poses[0].z+poses[1].z)/2);
-            if (mode === 'aerial') { desired.set(extent*.55,extent*1.15,extent*.75); target.set(0,0,0); }
+            models.forEach((model, index) => { const car=world.cars[index], pose=poses[index]; model.group.position.set(pose.x, pose.y+Math.sin(car.distance*3)*.004, pose.z); model.group.rotation.set(-Math.atan(pose.grade)-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015); model.wheels.forEach(wheel=>wheel.rotation.x=car.distance/.274); });
+            const center = new THREE.Vector3((poses[0].x+poses[1].x)/2,(poses[0].y+poses[1].y)/2,(poses[0].z+poses[1].z)/2);
+            if (mode === 'aerial') { desired.set(extent*.55,meanAltitude+extent*1.15,extent*.75); target.set(0,meanAltitude,0); }
             else if (mode === 'car-1' || mode === 'car-2') {
-                const p=poses[mode==='car-1'?0:1], forward=new THREE.Vector3(Math.sin(p.heading),0,Math.cos(p.heading));
-                desired.set(p.x,1.15,p.z).addScaledVector(forward,.10); target.set(p.x,1.05,p.z).addScaledVector(forward,20);
+                const p=poses[mode==='car-1'?0:1], forward=new THREE.Vector3(Math.sin(p.heading),p.grade,Math.cos(p.heading));
+                desired.set(p.x,p.y+1.15,p.z).addScaledVector(forward,.10); target.set(p.x,p.y+1.05,p.z).addScaledVector(forward,20);
             } else {
                 const gap=Math.hypot(poses[0].x-poses[1].x,poses[0].z-poses[1].z), heading=poses[0].heading;
                 desired.copy(center).add(new THREE.Vector3(-Math.sin(heading)*(10+gap*.9)+Math.cos(heading)*7,6+gap*.45,-Math.cos(heading)*(10+gap*.9)-Math.sin(heading)*7)); target.copy(center).add(new THREE.Vector3(0,.5,0));

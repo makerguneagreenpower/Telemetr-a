@@ -59,6 +59,7 @@ export default function RaceWorldView({ worldRef, world, running, track }: { wor
                 <div className="race-world-broadcast"><span><i className={running ? 'broadcast-dot' : ''} />{running ? 'SIMULACIÓN EN MARCHA' : 'CARRERA PAUSADA'}</span><strong>{time(world.elapsed)}</strong></div>
                 <div className="race-world-timing" aria-label="Orden actual de carrera">{order.map((car, rank) => <div key={car.id}><b>{rank + 1}</b><span className={`race-mini-swatch ${car.id}`} /><span>Coche {car.id === 'car-1' ? '1' : '2'}</span><strong>{(car.speed * 3.6).toFixed(0)} <small>km/h</small></strong></div>)}</div>
             </div>
+            {track.elevation.hasElevation && <ElevationStrip world={world} track={track} />}
             {fullscreenError && <p className="race-media-note" role="status">{fullscreenError}</p>}
             <p className="race-media-note">Escena 3D interactiva, no vídeo grabado. Física simplificada con aceleración, frenada, curvas y consumo; sin conexión a coches ni cámaras reales.</p>
         </section>
@@ -67,6 +68,19 @@ export default function RaceWorldView({ worldRef, world, running, track }: { wor
             <section className="panel race-classification"><div className="panel-heading"><div><h2>Clasificación en vivo</h2><p>Orden por distancia recorrida, incluyendo las vueltas completas</p></div></div>{order.map((car, rank) => <div className="race-position-row" key={car.id}><b>{rank + 1}</b><span className={`race-car-swatch ${car.id}`} /><div><strong>Coche {car.id === 'car-1' ? '1' : '2'}</strong><small>Vuelta {Math.floor(car.distance / track.length) + 1} · {car.distance.toLocaleString('es-ES', { maximumFractionDigits: 0 })} m recorridos</small></div><span>{rank === 0 ? 'Líder' : `A ${(order[0].distance - car.distance).toLocaleString('es-ES', { maximumFractionDigits: 1 })} m`}</span></div>)}<p className="race-media-note">Las diferencias de ritmo cambian con las curvas y la entrega de potencia de cada coche. La cámara, el mapa y las lecturas comparten el mismo estado de carrera.</p></section>
         </div>
     </>;
+}
+
+function ElevationStrip({ world, track }: { world: RaceWorld; track: CircuitRuntime }) {
+    const top = Math.max(track.elevation.range, 1), toY = (y: number) => 36 - y / top * 30;
+    const line = track.outline.map((p, i) => `${(i / (track.outline.length - 1) * 100).toFixed(2)},${toY(p.y).toFixed(2)}`).join(' ');
+    return <div className="race-elevation">
+        <div className="race-elevation-heading"><strong>Perfil de altura</strong><span>{`${track.elevation.range.toLocaleString('es-ES', { maximumFractionDigits: 1 })} m de desnivel · pendiente máx. ${(track.elevation.maxGrade * 100).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`}</span></div>
+        <div className="race-elevation-chart">
+            <svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="Perfil de altura de la vuelta con la posición de los dos coches"><polygon points={`0,40 ${line} 100,40`} fill="var(--red)" opacity=".14" /><polyline points={line} fill="none" stroke="var(--red)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" /></svg>
+            {world.cars.map((car, index) => { const progress = (car.distance % track.length) / track.length, p = track.point(progress); return <span key={car.id} className={`race-elevation-car race-mini-swatch ${car.id}`} style={{ left: `${progress * 100}%`, top: `${toY(p.y) / 40 * 100}%` }} title={`Coche ${index + 1} · ${p.y.toFixed(1)} m · ${(p.grade * 100).toFixed(1)} %`} />; })}
+        </div>
+        <div className="race-elevation-axis"><span>Meta</span><span>{Math.round(track.length)} m</span></div>
+    </div>;
 }
 
 function SharedCircuit({ world, track }: { world: RaceWorld; track: CircuitRuntime }) {

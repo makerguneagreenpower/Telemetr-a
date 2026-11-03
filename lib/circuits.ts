@@ -1,7 +1,11 @@
 import { TRACK_OUTLINE, type TrackPoint } from './race-track';
 
-export type CircuitPoint = { x: number; z: number };
-export type GeoPoint = { lat: number; lng: number };
+/** `y` is the optional altitude in metres. Points without it are interpolated from their neighbours. */
+export type CircuitPoint = { x: number; z: number; y?: number };
+export type GeoPoint = { lat: number; lng: number; alt?: number };
+/** Track sample with altitude (`y`, lowest point = 0) and slope (`grade`, rise/run; 0.05 = 5 %). */
+export type CircuitTrackPoint = TrackPoint & { y: number; grade: number };
+export type ElevationSummary = { range: number; climb: number; maxGrade: number; hasElevation: boolean };
 export type CircuitDefinition = {
     version: 1; id: string; name: string; competition: string; width: number;
     source: 'image' | 'map' | 'kml' | 'geojson' | 'demo';
@@ -13,9 +17,12 @@ export type CircuitDefinition = {
 export type CircuitRuntime = {
     id: string; name: string; competition: string; width: number; length: number;
     source: CircuitDefinition['source']; revision: string; samples: number;
-    point: (progress: number) => TrackPoint; outline: TrackPoint[]; viewBox: string;
+    point: (progress: number) => CircuitTrackPoint; outline: CircuitTrackPoint[]; viewBox: string;
     bounds: { minX: number; maxX: number; minZ: number; maxZ: number; span: number };
+    elevation: ElevationSummary;
 };
+export const MAX_ALTITUDE = 9000;
+export const MAX_GRADE = .25;
 export const MAX_CIRCUIT_POINTS = 5000;
 const R = 6371008.8;
 const radians = Math.PI / 180;
@@ -27,7 +34,11 @@ export function cleanVertices(points: CircuitPoint[]) {
     const clean: CircuitPoint[] = [];
     for (const point of points) {
         if (!point || !finite(point.x) || !finite(point.z)) throw new Error('El trazado contiene coordenadas no válidas.');
-        if (!clean.length || pointDistance(clean[clean.length - 1], point) > .001) clean.push({ x: point.x, z: point.z });
+        const y = (point as { y?: unknown }).y;
+        if (y !== undefined && y !== null && (!finite(y) || Math.abs(y) > MAX_ALTITUDE)) throw new Error('Hay alturas no válidas en el trazado.');
+        const next: CircuitPoint = finite(y) ? { x: point.x, z: point.z, y } : { x: point.x, z: point.z };
+        if (!clean.length || pointDistance(clean[clean.length - 1], point) > .001) clean.push(next);
+        else if (finite(y)) clean[clean.length - 1].y = y;
     }
     if (clean.length > 1 && pointDistance(clean[0], clean[clean.length - 1]) < .001) clean.pop();
     if (clean.length < 3) throw new Error('Marca al menos tres puntos diferentes para formar el circuito.');
@@ -44,7 +55,9 @@ export function geoToVertices(points: GeoPoint[]): CircuitPoint[] {
     return points.map(p => {
         let delta = p.lng - origin.lng;
         if (delta > 180) delta -= 360; if (delta < -180) delta += 360;
-        return { x: R * radians * delta * cos, z: -R * radians * (p.lat - origin.lat) };
+        const point: CircuitPoint = { x: R * radians * delta * cos, z: -R * radians * (p.lat - origin.lat) };
+        if (finite(p.alt)) point.y = p.alt;
+        return point;
     });
 }
 
@@ -52,7 +65,34 @@ export function imageToVertices(points: CircuitPoint[], calibration: CircuitPoin
     if (calibration.length !== 2 || !finite(metres) || metres <= 0 || metres > 50000) throw new Error('Calibra la imagen con dos puntos y su distancia real en metros.');
     const pixels = pointDistance(calibration[0], calibration[1]);
     if (pixels < 2) throw new Error('Los dos puntos de calibración están demasiado juntos.');
-    return points.map(p => ({ x: p.x * metres / pixels, z: p.z * metres / pixels }));
+    return points.map(p => finite(p.y) ? { x: p.x * metres / pixels, z: p.z * metres / pixels, y: p.y } : { x: p.x * metres / pixels, z: p.z * metres / pixels });
+}
+
+/**
+ * Builds altitude as a function of distance along the lap. Only vertices with an explicit `y` are keys;
+ * between keys a monotone cubic (Hermite) curve gives smooth climbs and descents without overshoot.
+ */
+function elevationCurve(vertices: CircuitPoint[], cumulative: number[], length: number) {
+    const raw: { d: number; y: number }[] = [];
+    vertices.forEach((v, i) => { if (finite(v.y)) raw.push({ d: cumulative[i], y: v.y }); });
+    if (!raw.length) return () => 0;
+    if (raw.length === 1) { const only = raw[0].y; return () => only; }
+    const n = raw.length, gap = (from: number, to: number) => ((to - from) % length + length) % length || length;
+    const keys = raw.map((key, i) => {
+        const prev = raw[(i - 1 + n) % n], next = raw[(i + 1) % n];
+        const hp = gap(prev.d, key.d), hn = gap(key.d, next.d);
+        const dp = (key.y - prev.y) / hp, dn = (next.y - key.y) / hn;
+        const slope = dp * dn <= 0 ? 0 : Math.sign(dp) * Math.min(Math.abs((hp * dp + hn * dn) / (hp + hn)), 3 * Math.min(Math.abs(dp), Math.abs(dn)));
+        return { ...key, slope };
+    });
+    return (distance: number) => {
+        let low = 0, high = n - 1;
+        if (distance < keys[0].d || distance >= keys[n - 1].d) low = n - 1;
+        else { while (high - low > 1) { const mid = (low + high) >> 1; if (keys[mid].d <= distance) low = mid; else high = mid; } }
+        const a = keys[low], b = keys[(low + 1) % n], h = gap(a.d, b.d), t = ((distance - a.d) % length + length) % length / h;
+        const t2 = t * t, t3 = t2 * t;
+        return (2 * t3 - 3 * t2 + 1) * a.y + (t3 - 2 * t2 + t) * h * a.slope + (-2 * t3 + 3 * t2) * b.y + (t3 - t2) * h * b.slope;
+    };
 }
 
 export function createCircuitRuntime(definition: CircuitDefinition): CircuitRuntime {
@@ -60,30 +100,48 @@ export function createCircuitRuntime(definition: CircuitDefinition): CircuitRunt
     const original = cleanVertices(definition.vertices);
     const xs = original.map(p => p.x), zs = original.map(p => p.z);
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2, centerZ = (Math.min(...zs) + Math.max(...zs)) / 2;
-    const vertices = original.map(p => ({ x: p.x - centerX, z: p.z - centerZ }));
+    const vertices = original.map(p => ({ x: p.x - centerX, z: p.z - centerZ, y: p.y }));
     const loop = [...vertices, vertices[0]], cumulative = [0];
     for (let i = 1; i < loop.length; i++) cumulative.push(cumulative[i - 1] + pointDistance(loop[i - 1], loop[i]));
     const length = cumulative[cumulative.length - 1];
     if (length < 50 || length > 50000) throw new Error('La longitud del circuito debe estar entre 50 m y 50 km. Comprueba la escala y el cierre del trazado.');
-    const at = (progress: number): CircuitPoint => {
-        const distance = ((progress % 1 + 1) % 1) * length;
+    const rawAltitude = elevationCurve(vertices, cumulative, length);
+    const wrap = (distance: number) => (distance % length + length) % length;
+    const at = (distance: number): CircuitPoint => {
         let low = 0, high = cumulative.length - 1;
         while (high - low > 1) { const mid = (low + high) >> 1; if (cumulative[mid] <= distance) low = mid; else high = mid; }
         const ratio = (distance - cumulative[low]) / (cumulative[high] - cumulative[low]);
         return { x: loop[low].x + (loop[high].x - loop[low].x) * ratio, z: loop[low].z + (loop[high].z - loop[low].z) * ratio };
     };
-    const point = (progress: number): TrackPoint => {
-        const position = at(progress), previous = at(progress - 1 / length), next = at(progress + 1 / length);
-        return { ...position, heading: Math.atan2(next.x - previous.x, next.z - previous.z) };
+    // Altitude is normalised so the lowest point of the lap sits at y = 0 in the 3D scene.
+    const profileSamples = Math.min(8000, Math.max(400, Math.ceil(length)));
+    const profile = Array.from({ length: profileSamples }, (_, i) => rawAltitude(i / profileSamples * length));
+    const lowest = Math.min(...profile), highest = Math.max(...profile);
+    const altitude = (distance: number) => rawAltitude(wrap(distance)) - lowest;
+    const gradeWindow = Math.min(4, length / 50);
+    const point = (progress: number): CircuitTrackPoint => {
+        const distance = wrap(progress * length), position = at(distance), previous = at(wrap(distance - 1)), next = at(wrap(distance + 1));
+        return { ...position, heading: Math.atan2(next.x - previous.x, next.z - previous.z), y: altitude(distance), grade: (altitude(distance + gradeWindow) - altitude(distance - gradeWindow)) / (2 * gradeWindow) };
     };
+    let climb = 0, maxGrade = 0;
+    for (let i = 0; i < profileSamples; i++) {
+        const rise = profile[(i + 1) % profileSamples] - profile[i];
+        if (rise > 0) climb += rise;
+    }
+    const step = Math.max(1, length / 2000);
+    for (let d = 0; d < length; d += step) maxGrade = Math.max(maxGrade, Math.abs((altitude(d + gradeWindow) - altitude(d - gradeWindow)) / (2 * gradeWindow)));
+    const elevation: ElevationSummary = { range: highest - lowest, climb, maxGrade, hasElevation: highest - lowest > .01 };
+    if (maxGrade > MAX_GRADE) throw new Error(`Hay una pendiente del ${Math.round(maxGrade * 100)} %. Revisa las alturas: el máximo admitido es ${MAX_GRADE * 100} %.`);
     const samples = Math.min(4096, Math.max(720, Math.ceil(length / 2)));
     const outline = Array.from({ length: Math.min(samples, 1200) + 1 }, (_, index) => point(index / Math.min(samples, 1200)));
     const minX = Math.min(...vertices.map(p => p.x)), maxX = Math.max(...vertices.map(p => p.x)), minZ = Math.min(...vertices.map(p => p.z)), maxZ = Math.max(...vertices.map(p => p.z));
     const span = Math.max(maxX - minX, maxZ - minZ), padding = Math.max(20, definition.width * 2, span * .08);
-    return { id: definition.id, name: definition.name, competition: definition.competition, source: definition.source, revision: definition.updatedAt, width: definition.width, length, samples, point, outline, bounds: { minX, maxX, minZ, maxZ, span }, viewBox: `${minX - padding} ${minZ - padding} ${maxX - minX + padding * 2} ${maxZ - minZ + padding * 2}` };
+    return { id: definition.id, name: definition.name, competition: definition.competition, source: definition.source, revision: definition.updatedAt, width: definition.width, length, samples, point, outline, elevation, bounds: { minX, maxX, minZ, maxZ, span }, viewBox: `${minX - padding} ${minZ - padding} ${maxX - minX + padding * 2} ${maxZ - minZ + padding * 2}` };
 }
 
-export const DEMO_CIRCUIT: CircuitDefinition = { version: 1, id: 'demo', name: 'Circuito de demostración', competition: '', width: 8.2, source: 'demo', vertices: TRACK_OUTLINE.slice(0, -1).map(p => ({ x: p.x, z: p.z })), updatedAt: 'demo-v1' };
+// The demo lap has a gentle climb after the start, a crest and a descent back to the finish line.
+const DEMO_HEIGHTS: Record<number, number> = { 0: 0, 60: 6, 115: 12, 175: 9, 235: 3, 300: 0 };
+export const DEMO_CIRCUIT: CircuitDefinition = { version: 1, id: 'demo', name: 'Circuito de demostración', competition: '', width: 8.2, source: 'demo', vertices: TRACK_OUTLINE.slice(0, -1).map((p, i) => i in DEMO_HEIGHTS ? { x: p.x, z: p.z, y: DEMO_HEIGHTS[i] } : { x: p.x, z: p.z }), updatedAt: 'demo-v3' };
 export const DEMO_TRACK = createCircuitRuntime(DEMO_CIRCUIT);
 
 export function validateCircuit(value: unknown): CircuitDefinition {
@@ -94,7 +152,10 @@ export function validateCircuit(value: unknown): CircuitDefinition {
     const circuit: CircuitDefinition = { version: 1, id: typeof data.id === 'string' && /^[\w-]{1,80}$/.test(data.id) && data.id !== 'demo' ? data.id : crypto.randomUUID(), name: data.name.trim(), competition: data.competition.trim(), width: data.width, source: data.source as CircuitDefinition['source'], vertices: cleanVertices(data.vertices), updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date().toISOString() };
     if (data.geographic !== undefined) {
         if (!Array.isArray(data.geographic)) throw new Error('Coordenadas geográficas no válidas.');
-        circuit.geographic = (data.geographic as GeoPoint[]).map(p => ({ lat: p.lat, lng: p.lng }));
+        circuit.geographic = (data.geographic as GeoPoint[]).map(p => {
+            if (p?.alt !== undefined && p.alt !== null && (!finite(p.alt) || Math.abs(p.alt) > MAX_ALTITUDE)) throw new Error('Hay alturas no válidas en las coordenadas.');
+            return finite(p?.alt) ? { lat: p.lat, lng: p.lng, alt: p.alt } : { lat: p?.lat, lng: p?.lng };
+        });
         geoToVertices(circuit.geographic);
         // Use the coordinates as the authority when both representations are supplied.
         circuit.vertices = cleanVertices(geoToVertices(circuit.geographic));
@@ -125,7 +186,9 @@ export function parseGeographicRoutes(text: string, format: 'kml' | 'geojson'): 
     const add = (name: string, coordinates: unknown) => {
         if (!Array.isArray(coordinates) || coordinates.length < 3) return;
         if (routes.length >= 100) throw new Error('El archivo contiene más de 100 recorridos. Exporta solo la capa del circuito.');
-        const points = coordinates.map(c => { if (!Array.isArray(c) || !finite(c[0]) || !finite(c[1])) throw new Error('Hay coordenadas no válidas en el recorrido.'); return { lng: c[0], lat: c[1] }; });
+        const points: GeoPoint[] = coordinates.map(c => { if (!Array.isArray(c) || !finite(c[0]) || !finite(c[1])) throw new Error('Hay coordenadas no válidas en el recorrido.'); return finite(c[2]) && Math.abs(c[2]) <= MAX_ALTITUDE ? { lng: c[0], lat: c[1], alt: c[2] } : { lng: c[0], lat: c[1] }; });
+        // Paths drawn "clamped to ground" export altitude 0 everywhere: that is not real elevation data.
+        if (!points.some(p => p.alt !== undefined && p.alt !== points[0].alt)) for (const p of points) delete p.alt;
         geoToVertices(points); routes.push({ name: name.slice(0,100) || `Recorrido ${routes.length + 1}`, points, source: format });
     };
     if (format === 'kml') {
@@ -161,6 +224,12 @@ export function parseGeographicRoutes(text: string, format: 'kml' | 'geojson'): 
 export function circuitKml(circuit: CircuitDefinition) {
     if (!circuit.geographic?.length) throw new Error('Este circuito no tiene coordenadas geográficas. Exporta el JSON para conservar la imagen y la escala.');
     const escape = (text: string) => text.replace(/[<>&"']/g, character => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&apos;' })[character]!);
-    const points = [...circuit.geographic, circuit.geographic[0]].map(p => `${p.lng},${p.lat},0`).join(' ');
-    return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>${escape(circuit.name)}</name><LineString><tessellate>1</tessellate><coordinates>${points}</coordinates></LineString></Placemark></Document></kml>`;
+    const runtime = createCircuitRuntime(circuit), withAltitude = runtime.elevation.hasElevation;
+    // Export the interpolated altitude for every vertex so other tools see the same profile as the simulation.
+    const vertices = geoToVertices(circuit.geographic), distances = [0];
+    for (let i = 1; i < vertices.length; i++) distances.push(distances[i - 1] + pointDistance(vertices[i - 1], vertices[i]));
+    const base = Math.min(...circuit.geographic.map(p => finite(p.alt) ? p.alt : Infinity));
+    const altitudeAt = (i: number) => (Number.isFinite(base) ? base : 0) + runtime.point(distances[i] / runtime.length).y;
+    const points = [...circuit.geographic, circuit.geographic[0]].map((p, i) => `${p.lng},${p.lat},${withAltitude ? altitudeAt(i % circuit.geographic!.length).toFixed(2) : 0}`).join(' ');
+    return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>${escape(circuit.name)}</name><LineString>${withAltitude ? '<altitudeMode>absolute</altitudeMode>' : '<tessellate>1</tessellate>'}<coordinates>${points}</coordinates></LineString></Placemark></Document></kml>`;
 }

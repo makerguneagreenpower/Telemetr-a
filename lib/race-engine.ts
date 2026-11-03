@@ -9,6 +9,7 @@ export type RaceVehicle = {
 };
 export type RaceWorld = { elapsed: number; cars: [RaceVehicle, RaceVehicle] };
 export const FIXED_STEP = 1 / 60;
+const GRAVITY = 9.81;
 const clamp = (v: number, low: number, high: number) => Math.max(low, Math.min(high, v));
 const angle = (v: number) => Math.atan2(Math.sin(v), Math.cos(v));
 
@@ -37,12 +38,16 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP, track: CircuitRun
         const targetSpeed = clamp(Math.min(13.1, cornerSpeed) * strategy, 2.5, 14.1);
         const mass = index ? 112 : 108;
         const drag = 12 + .18 * car.speed * car.speed;
-        const availableForce = (index ? 565 : 550) * .82 / Math.max(2, car.speed);
+        // Gravity along the slope: positive uphill (slows the car), negative downhill (pushes it).
+        const gravity = mass * GRAVITY * here.grade / Math.sqrt(1 + here.grade * here.grade);
+        const availableForce = (index ? 565 : 550) * .82 / Math.max(1.2, car.speed);
         const wantedAcceleration = (targetSpeed - car.speed) * 1.35;
-        const acceleration = clamp(wantedAcceleration, -2.6, Math.min(.95, (availableForce - drag) / mass));
+        // Downhill the controller brakes to hold its target speed; uphill the motor force limits the climb.
+        const acceleration = clamp(wantedAcceleration, -2.6, Math.min(.95, (availableForce - drag - gravity) / mass));
         const speed = Math.max(0, car.speed + acceleration * dt);
         const distance = car.distance + (car.speed + speed) * .5 * dt;
-        const powerW = Math.max(0, (mass * acceleration + drag) * speed) / .82 + 12;
+        const tractive = mass * acceleration + drag + gravity;
+        const powerW = Math.max(0, tractive * speed) / .82 + 12;
         const completed = Math.floor(distance / track.length) > Math.floor(car.distance / track.length);
         const lapTime = elapsed - car.lapStarted;
         const turn = angle(ahead.heading - here.heading);
@@ -50,8 +55,8 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP, track: CircuitRun
             ...car, distance, speed, acceleration, powerW,
             lane: (index ? 1 : -1) * Math.min(.9, track.width * .19) - clamp(turn, -.5, .5) * .4,
             steering: clamp(turn * 5, -1, 1),
-            throttle: clamp((mass * Math.max(0, acceleration) + drag) / Math.max(1, availableForce), 0, 1),
-            brake: clamp(-acceleration / 2.6, 0, 1),
+            throttle: clamp(tractive / Math.max(1, availableForce), 0, 1),
+            brake: clamp(-tractive / (2.6 * mass), 0, 1),
             consumptionWh: car.consumptionWh + powerW * dt / 3600,
             motorTemp: car.motorTemp + (powerW * .20 - (car.motorTemp - 24) * 2) * dt / 800,
             batteryTemp: car.batteryTemp + (powerW * .045 - (car.batteryTemp - 24) * .9) * dt / 6000,
@@ -65,7 +70,7 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP, track: CircuitRun
 
 export function vehiclePose(car: RaceVehicle, track: CircuitRuntime = DEMO_TRACK) {
     const point = track.point(car.distance / track.length);
-    return { x: point.x + Math.cos(point.heading) * car.lane, z: point.z - Math.sin(point.heading) * car.lane, heading: point.heading };
+    return { x: point.x + Math.cos(point.heading) * car.lane, y: point.y, z: point.z - Math.sin(point.heading) * car.lane, heading: point.heading, grade: point.grade };
 }
 
 export function raceOrder(world: RaceWorld) {
