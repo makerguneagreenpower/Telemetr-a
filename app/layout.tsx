@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ThemeControls from "./theme-controls";
 
 export const metadata: Metadata = {
   title: "MGRT · MakerGunea Racing Team",
@@ -19,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
-      <body className="antialiased">{children}</body>
+    <html lang="es" suppressHydrationWarning>
+      <body className="antialiased"><ThemeControls>{children}</ThemeControls></body>
     </html>
   );
 }

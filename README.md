@@ -31,3 +31,28 @@ La vista inicial «Resumen general» muestra solo la tabla de la sesión. «Coch
 ## Cuenta, pilotos y carreras
 
 /acceso proporciona el acceso real con ChatGPT y cierre de sesión; Google sigue pendiente. Eliminar un piloto desactiva su nombre en el listado de la cuenta mediante D1, sin borrar ni anonimizar las muestras históricas. Cada gráfico incluye una tabla compacta de muestras cercanas a la seleccionada. /carreras muestra todas las sesiones de jornadas de carrera (entrenamientos incluidos), ordenadas por fecha descendente y fases F24+/F24. El archivo pagina metadatos y recupera cada documento completo al abrirlo; permite descargarlos como JSON. Cada consulta y eliminación requiere identidad y comprueba el propietario.
+
+
+## Tema y vista Carrera
+
+El botón de la esquina inferior derecha cambia entre el tema claro y el oscuro en todas las páginas. La preferencia se conserva en este navegador; solo se guarda la preferencia visual, no la telemetría.
+
+«Carrera» (`/carrera`) muestra una **simulación**, sin conexión al coche, con cuatro lecturas cada segundo y sin gráficos: temperatura del motor, temperatura de baterías, velocidad en km/h y consumo acumulado en Wh. Solo si el valor es estrictamente mayor que su límite se destaca en rojo con un indicador luminoso de pulso lento, un icono y la etiqueta «Alerta»: motor >50 °C, baterías >40 °C, velocidad >40 km/h y consumo >7 Wh. Incluye selección de coche, pausa/continuación y reinicio. El escenario arranca con un minuto de historial de ejemplo y conserva como máximo las últimas 600 lecturas. Cambiar de coche reinicia su escenario. Las lecturas simuladas no se guardan como sesiones ni se mezclan con los archivos importados.
+
+
+## Otros equipos
+
+«Otros equipos» (`/otros-equipos`) consulta las competiciones públicas de [NS Service](https://test.ns-service.es/competiciones.php). Permite buscar competiciones y filtrar por año; dentro de cada competición, seleccionar la prueba y buscar por equipo, centro o dorsal, filtrar categorías y ordenar por posición, nombre, velocidad o distancia. Los resultados incluyen vueltas, tiempos, mejor vuelta, distancia, velocidad y las incidencias publicadas. Las inscripciones sin resultado permanecen identificadas como tales.
+
+El listado de competiciones se obtiene desde una ruta propia con un destino fijo y un tiempo de espera limitado. Los resultados se reciben mediante Socket.IO desde la misma fuente pública que utiliza la web original. Se muestra la última recepción y el estado de conexión; una interrupción conserva los últimos datos válidos e indica el error. «Actualizar» vuelve a consultar el listado y a conectar con los resultados. La consulta depende de la disponibilidad de NS Service y no proporciona telemetría privada de los equipos. El cliente de resultados se carga al abrir esta sección.
+
+
+### Comparativa y conclusiones de otros equipos
+
+Cada competición incluye un resumen calculado de todas sus pruebas, independiente de los filtros y la paginación. El ritmo medio se obtiene de la distancia y el tiempo publicados; se separan las pruebas y, en entrenamientos mixtos, las categorías de la fuente. Se muestran líderes y empates, la mejor vuelta y el número de inscripciones comparables. Las descalificaciones no se consideran líderes y las incidencias se señalan.
+
+La fuente no facilita energía en Wh: no se identifica un supuesto mayor consumidor ni se deduce gasto a partir de velocidad o distancia. Esta limitación también se incluye en las instrucciones de IA.
+
+El botón «Generar conclusiones» usa la [Responses API de OpenAI](https://developers.openai.com/api/docs/guides/text), con `gpt-5.4-mini` por defecto (configurable mediante `OPENAI_MODEL`). Para activarlo, configura `OPENAI_API_KEY` **solo en el servidor**: en desarrollo con Cloudflare puede añadirse a `.dev.vars` en la raíz del proyecto y reiniciar `npm run dev`; en alojamiento, utilizar un secreto del servidor. `.dev.vars*` y `.env*` están excluidos de Git. No incluyas la clave en variables `NEXT_PUBLIC_*` ni en el navegador.
+
+La generación requiere iniciar sesión y se ejecuta únicamente al pulsar el botón. Se envía el resumen de resultados de la competición seleccionada, con `store: false`. El informe identifica la lectura y la hora utilizadas, no se regenera en cada actualización y se cancela al abandonar la competición. Sin configurar la clave, la interfaz indica «IA pendiente de conexión» y ofrece el resumen calculado; no presenta ese resumen como texto generado por un modelo. El análisis de pilotos en `/api/analyze` sigue siendo independiente y permanece pendiente.
