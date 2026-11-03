@@ -58,3 +58,16 @@ La fuente no facilita energía en Wh: no se identifica un supuesto mayor consumi
 El botón «Generar conclusiones» usa la [Responses API de OpenAI](https://developers.openai.com/api/docs/guides/text), con `gpt-5.4-mini` por defecto (configurable mediante `OPENAI_MODEL`). Para activarlo, configura `OPENAI_API_KEY` **solo en el servidor**: en desarrollo con Cloudflare puede añadirse a `.dev.vars` en la raíz del proyecto y reiniciar `npm run dev`; en alojamiento, utilizar un secreto del servidor. `.dev.vars*` y `.env*` están excluidos de Git. No incluyas la clave en variables `NEXT_PUBLIC_*` ni en el navegador.
 
 La generación requiere iniciar sesión y se ejecuta únicamente al pulsar el botón. Se envía el resumen de resultados de la competición seleccionada, con `store: false`. El informe identifica la lectura y la hora utilizadas, no se regenera en cada actualización y se cancela al abandonar la competición. Sin configurar la clave, la interfaz indica «IA pendiente de conexión» y ofrece el resumen calculado; no presenta ese resumen como texto generado por un modelo. El análisis de pilotos en `/api/analyze` sigue siendo independiente y permanece pendiente.
+
+
+## Circuitos de cada carrera
+
+La sección **Circuitos** (`/circuitos`) prepara recorridos para la simulación de los dos coches. Cada circuito tiene nombre, competición, ancho de pista, meta y sentido. La biblioteca se guarda en IndexedDB del navegador; la selección activa se recuerda localmente. No se sincroniza con la cuenta: exporta el JSON para compartirlo o conservar una copia en otro dispositivo.
+
+- **Imagen:** sube PNG/JPG/WebP de hasta 6 MB, marca dos puntos A–B e introduce una distancia conocida en metros. Traza la línea central en orden; puedes arrastrar, eliminar, deshacer, invertir el sentido y elegir otro punto como meta. La escala permite reproducir la longitud, pero la precisión depende del plano y de la calibración. La imagen original y la calibración se incluyen en el JSON.
+- **Mapa:** sitúa el editor por latitud/longitud y marca el recorrido sobre OpenStreetMap. Puede abrirse la ubicación en Google Maps.
+- **Google Earth / My Maps:** dibuja una ruta por el centro de la pista y exporta como KML sin comprimir. Importa el `.kml` y, si hay varias líneas, elige la que corresponde a la carrera. También se admiten GeoJSON (LineString, MultiLineString y perímetro exterior Polygon) y copias JSON propias. Los KMZ deben exportarse como KML o descomprimirse antes de importar.
+
+**Guardar y probar con los dos coches** abre Carrera con el circuito seleccionado. Allí puedes cambiar entre la demostración y los circuitos guardados; cambiar de pista reinicia ambos coches. El mismo trazado y su longitud alimentan la escena 3D, el mapa, la física, el progreso y los cronos. La proyección geográfica local y el modelo son aproximaciones: no se reconstruyen automáticamente edificios, relieve ni elevaciones a partir del KML o de una imagen. El JSON conserva todos los datos del editor; la exportación KML está disponible para recorridos con coordenadas geográficas.
+
+Referencias de exportación: [Google Earth](https://developers.google.com/maps/documentation/earth/quickstart) y [Google My Maps](https://support.google.com/mymaps/answer/3109452?hl=es).
