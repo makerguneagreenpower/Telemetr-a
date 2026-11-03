@@ -207,3 +207,5 @@ main footer { padding-bottom: 85px; }
 .circuit-race-hint{flex-basis:100%;color:var(--muted);font-size:11px;line-height:1.7}
 @media(min-width:601px){.sidebar{overflow-y:auto}.sidebar nav,.sidebar-session,.sidebar-bottom{flex-shrink:0}}
 @media(max-width:600px){.sidebar .nav-item{min-width:0;padding:9px 5px}}
+
+.circuits-workspace .notice,.circuit-library-card p,.race-shared-track h2{overflow-wrap:anywhere}

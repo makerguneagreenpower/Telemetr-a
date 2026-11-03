@@ -102,7 +102,7 @@ export default function Dashboard({ user, initialView = 'inicio' }: { user: { na
                 <span className="small-label">COCHE DEL EQUIPO</span>
                 <div className="car-number">{car === 'unassigned' ? '—' : <>MG<span>{car === 'car-1' ? '01' : '02'}</span></>}</div>
                 <p>{car === 'unassigned' ? 'Sesiones sin clasificar' : context === 'practice' ? 'Día de prácticas' : 'F24+ y F24 · ambos coches'}</p>
-                <div className="session-type"><Radio size={14} />{view === 'carrera' ? 'Carrera · simulación' : view === 'otros-equipos' ? 'Fuente externa · NS Service' : !session ? 'Sin sesión seleccionada' : session.demo ? 'Sesión de demostración' : 'Archivo importado'}</div>
+                <div className="session-type"><Radio size={14} />{view === 'circuitos' ? 'Circuitos · biblioteca local' : view === 'carrera' ? 'Carrera · simulación' : view === 'otros-equipos' ? 'Fuente externa · NS Service' : !session ? 'Sin sesión seleccionada' : session.demo ? 'Sesión de demostración' : 'Archivo importado'}</div>
             </div>
             <div className="sidebar-bottom">
                 <button onClick={() => setModal('login')}>

@@ -71,3 +71,5 @@ La sección **Circuitos** (`/circuitos`) prepara recorridos para la simulación 
 **Guardar y probar con los dos coches** abre Carrera con el circuito seleccionado. Allí puedes cambiar entre la demostración y los circuitos guardados; cambiar de pista reinicia ambos coches. El mismo trazado y su longitud alimentan la escena 3D, el mapa, la física, el progreso y los cronos. La proyección geográfica local y el modelo son aproximaciones: no se reconstruyen automáticamente edificios, relieve ni elevaciones a partir del KML o de una imagen. El JSON conserva todos los datos del editor; la exportación KML está disponible para recorridos con coordenadas geográficas.
 
 Referencias de exportación: [Google Earth](https://developers.google.com/maps/documentation/earth/quickstart) y [Google My Maps](https://support.google.com/mymaps/answer/3109452?hl=es).
+
+Comprobación de geometría, escala, importación GeoJSON y simulación: `node scripts/check-circuits.cjs` desde la carpeta del proyecto.
