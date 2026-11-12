@@ -8,6 +8,10 @@ Panel en español con tema negro, rojo y blanco. Incluye portada, datos de ejemp
 
 Node.js 22.13 o superior. Ejecuta `npm install` y `npm run dev`. `npm run db:generate` genera las migraciones; `npm run build` produce el Worker. El alojamiento provisiona D1 (`DB`) y R2 (`BUCKET`). Las muestras importadas se guardan en R2, con metadatos y propietario en D1. Cada cuenta solo puede consultar sus sesiones.
 
+## Circuitos 3D
+
+En «Crear circuito», dibuja o importa el recorrido con coordenadas geográficas y pulsa «Cargar entorno real». La vista muestra el relieve Copernicus (~90 m) de Open-Meteo y los edificios y usos del suelo disponibles en OpenStreetMap; necesita conexión a internet y atribuye ambas fuentes. Los datos del entorno se consultan al abrir la vista y no se guardan con el circuito. Los recorridos trazados solo sobre una imagen no tienen ubicación geográfica para consultar edificios y terreno.
+
 ## Meter datos
 
 La sección «Meter datos» ofrece documento o entrada manual. Ambos métodos crean una nueva sesión con fecha, coche y contexto. El documento se valida y muestra una vista previa antes de pulsar «Guardar sesión». La entrada manual permite añadir, editar y eliminar filas; los datos permanecen en el formulario si falla el guardado. Se utiliza la misma validación y almacenamiento D1/R2.
