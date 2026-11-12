@@ -12,6 +12,8 @@ Node.js 22.13 o superior. Ejecuta `npm install` y `npm run dev`. `npm run db:gen
 
 En «Crear circuito», dibuja o importa el recorrido con coordenadas geográficas y pulsa «Cargar entorno real». La vista muestra el relieve Copernicus (~90 m) de Open-Meteo y los edificios y usos del suelo disponibles en OpenStreetMap; necesita conexión a internet y atribuye ambas fuentes. Los datos del entorno se consultan al abrir la vista y no se guardan con el circuito. Los recorridos trazados solo sobre una imagen no tienen ubicación geográfica para consultar edificios y terreno.
 
+El apartado «Simulador» permite conducir el coche 3D Greenpower por un circuito guardado o el de demostración. Usa ↑ para acelerar, ↓ o espacio para frenar y ←/→ para girar (también W/A/S/D), o selecciona volante/Gamepad compatible con Gamepad API del navegador; dirección, acelerador y freno se leen del primer dispositivo conectado. Si el coche sale del trazado, aparece un aviso; volver a la pista cancela la cuenta atrás. Si permanece fuera durante 5 segundos, ambos coches y la carrera se reinician desde cero. Simulación arcade sin conexión al coche real.
+
 ## Meter datos
 
 La sección «Meter datos» ofrece documento o entrada manual. Ambos métodos crean una nueva sesión con fecha, coche y contexto. El documento se valida y muestra una vista previa antes de pulsar «Guardar sesión». La entrada manual permite añadir, editar y eliminar filas; los datos permanecen en el formulario si falla el guardado. Se utiliza la misma validación y almacenamiento D1/R2.

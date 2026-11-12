@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { DEMO_TRACK, type CircuitRuntime } from './circuits';
 import { vehiclePose, type RaceWorld } from './race-engine';
 
-export type RaceCamera = 'duel' | 'car-1' | 'car-2' | 'aerial';
+export type RaceCamera = 'duel' | 'car-1' | 'car-2' | 'aerial' | 'player';
 
 export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime = DEMO_TRACK) {
     const trackPoint = track.point, roadWidth = track.width / 2, barrier = roadWidth + 4, segmentCount = track.samples;
@@ -148,11 +148,36 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
         const labelCanvas = document.createElement('canvas'); labelCanvas.width = 128; labelCanvas.height = 56;
         const ctx = labelCanvas.getContext('2d')!; ctx.fillStyle = index ? '#d82439' : '#f2f3ee'; ctx.fillRect(0,0,128,56); ctx.fillStyle = index ? '#fff' : '#242b30'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign='center'; ctx.fillText(index ? '02' : '01',64,39);
         const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(labelCanvas), depthTest: false })); label.position.set(0,1.85,0); label.scale.set(1.15,.5,1); group.add(label);
-        return { group, wheels };
+        return { group, wheels, label };
     }
     const models = [makeCar(0), makeCar(1)];
     const desired = new THREE.Vector3(), target = new THREE.Vector3(), looking = new THREE.Vector3();
     let initialized = false, previousMode: RaceCamera | null = null;
+    let playerOrbitYaw = 0, playerOrbitPitch = .2, playerCameraDistance = 8;
+    let draggingCamera = false, previousPointerX = 0, previousPointerY = 0;
+    const pointerDown = (event: PointerEvent) => {
+        draggingCamera = true;
+        previousPointerX = event.clientX;
+        previousPointerY = event.clientY;
+        canvas.setPointerCapture(event.pointerId);
+    };
+    const pointerMove = (event: PointerEvent) => {
+        if (!draggingCamera) return;
+        playerOrbitYaw -= (event.clientX - previousPointerX) * .008;
+        playerOrbitPitch = THREE.MathUtils.clamp(playerOrbitPitch + (event.clientY - previousPointerY) * .006, -.05, 1.1);
+        previousPointerX = event.clientX;
+        previousPointerY = event.clientY;
+    };
+    const pointerUp = () => { draggingCamera = false; };
+    const wheel = (event: WheelEvent) => {
+        event.preventDefault();
+        playerCameraDistance = THREE.MathUtils.clamp(playerCameraDistance * Math.exp(event.deltaY * .001), 3, 35);
+    };
+    canvas.addEventListener('pointerdown', pointerDown);
+    canvas.addEventListener('pointermove', pointerMove);
+    canvas.addEventListener('pointerup', pointerUp);
+    canvas.addEventListener('pointercancel', pointerUp);
+    canvas.addEventListener('wheel', wheel, { passive: false });
 
     return {
         render(world: RaceWorld, mode: RaceCamera, dt: number) {
@@ -160,24 +185,40 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
             const w = Math.min(1800, Math.round(width * ratio)), h = Math.round(height * w / width);
             if (canvas.width !== w || canvas.height !== h) { renderer.setSize(w,h,false); camera.aspect=width/height; camera.updateProjectionMatrix(); }
             const poses = world.cars.map(car => vehiclePose(car, track));
-            models.forEach((model, index) => { const car=world.cars[index], pose=poses[index]; model.group.position.set(pose.x, pose.y+Math.sin(car.distance*3)*.004, pose.z); model.group.rotation.set(-Math.atan(pose.grade)-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015); model.wheels.forEach(wheel=>wheel.rotation.x=car.distance/.274); });
+            models.forEach((model, index) => { const car=world.cars[index], pose=poses[index]; model.group.visible=mode!=='player'||index===0; model.label.visible=mode!=='player'; model.group.position.set(pose.x, pose.y+Math.sin(car.distance*3)*.004, pose.z); model.group.rotation.set(-Math.atan(pose.grade)-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015); model.wheels.forEach(wheel=>wheel.rotation.x=car.distance/.274); });
             const center = new THREE.Vector3((poses[0].x+poses[1].x)/2,(poses[0].y+poses[1].y)/2,(poses[0].z+poses[1].z)/2);
             if (mode === 'aerial') { desired.set(extent*.55,meanAltitude+extent*1.15,extent*.75); target.set(0,meanAltitude,0); }
-            else if (mode === 'car-1' || mode === 'car-2') {
-                const p=poses[mode==='car-1'?0:1], forward=new THREE.Vector3(Math.sin(p.heading),p.grade,Math.cos(p.heading));
-                desired.set(p.x,p.y+1.15,p.z).addScaledVector(forward,.10); target.set(p.x,p.y+1.05,p.z).addScaledVector(forward,20);
+            else if (mode === 'player' || mode === 'car-1' || mode === 'car-2') {
+                const p=poses[mode==='car-2'?1:0], forward=new THREE.Vector3(Math.sin(p.heading),p.grade,Math.cos(p.heading)).normalize();
+                if(mode==='player'){
+                    const right = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
+                    const orbit = new THREE.Vector3()
+                        .addScaledVector(forward, -Math.cos(playerOrbitYaw) * playerCameraDistance * Math.cos(playerOrbitPitch))
+                        .addScaledVector(right, Math.sin(playerOrbitYaw) * playerCameraDistance * Math.cos(playerOrbitPitch));
+                    desired.set(p.x, p.y + 1, p.z).add(orbit);
+                    desired.y += playerCameraDistance * Math.sin(playerOrbitPitch);
+                    target.set(p.x, p.y + 1, p.z).addScaledVector(forward, 2);
+                }else{
+                    desired.set(p.x,p.y+1.15,p.z).addScaledVector(forward,.10);
+                    target.set(p.x,p.y+1.05,p.z).addScaledVector(forward,20);
+                }
             } else {
                 const gap=Math.hypot(poses[0].x-poses[1].x,poses[0].z-poses[1].z), heading=poses[0].heading;
                 desired.copy(center).add(new THREE.Vector3(-Math.sin(heading)*(10+gap*.9)+Math.cos(heading)*7,6+gap*.45,-Math.cos(heading)*(10+gap*.9)-Math.sin(heading)*7)); target.copy(center).add(new THREE.Vector3(0,.5,0));
             }
-            const snap=!initialized||previousMode!==mode||mode==='car-1'||mode==='car-2';
-            const smoothing=1-Math.exp(-Math.max(.001,dt)*4);
+            const snap=!initialized||previousMode!==mode||mode==='car-1'||mode==='car-2'||mode==='player';
+            const smoothing=1-Math.exp(-Math.max(.001,dt)*(mode==='player'?8:4));
             if(snap){camera.position.copy(desired);looking.copy(target);}else{camera.position.lerp(desired,smoothing);looking.lerp(target,smoothing);}
             camera.lookAt(looking); initialized=true; previousMode=mode;
             sun.target.position.copy(center); sun.position.copy(center).add(new THREE.Vector3(35,65,25)); sun.target.updateMatrixWorld();
             renderer.render(scene,camera);
         },
         dispose() {
+            canvas.removeEventListener('pointerdown', pointerDown);
+            canvas.removeEventListener('pointermove', pointerMove);
+            canvas.removeEventListener('pointerup', pointerUp);
+            canvas.removeEventListener('pointercancel', pointerUp);
+            canvas.removeEventListener('wheel', wheel);
             const geometries=new Set<THREE.BufferGeometry>(), materials=new Set<THREE.Material>(), textures=new Set<THREE.Texture>();
             scene.traverse(object=>{const item=object as THREE.Mesh;if(item.geometry)geometries.add(item.geometry);if(item.material)for(const mat of Array.isArray(item.material)?item.material:[item.material])materials.add(mat);});
             for(const mat of materials){for(const value of Object.values(mat))if(value instanceof THREE.Texture)textures.add(value);mat.dispose();}
