@@ -4,7 +4,7 @@ import { DEMO_TRACK, type CircuitRuntime } from './circuits';
 export type RaceVehicle = {
     id: CarId; distance: number; speed: number; acceleration: number;
     lane: number; steering: number; throttle: number; brake: number;
-    motorTemp: number; batteryTemp: number; consumptionWh: number;
+    motorTemp: number; batteryTemp: number; consumptionWh: number; lastLapWh: number | null; lapHistory: number[];
     powerW: number; lapStarted: number; lastLap: number | null; bestLap: number | null;
     worldX?: number; worldZ?: number; worldHeading?: number; routeProgress?: number; lapCount?: number; offTrack?: boolean; offTrackSeconds?: number;
 };
@@ -27,7 +27,7 @@ export function keyboardDrivingInput(keys: ReadonlySet<string>): DrivingInput {
 export function createRaceWorld(track: CircuitRuntime = DEMO_TRACK): RaceWorld {
     const car = (id: CarId, distance: number, lane: number): RaceVehicle => ({
         id, distance, lane, speed: 0, acceleration: 0, steering: 0, throttle: 0, brake: 0,
-        motorTemp: 35, batteryTemp: 26, consumptionWh: 0, powerW: 0,
+        motorTemp: 35, batteryTemp: 26, consumptionWh: 0, lastLapWh: null, lapHistory: [], powerW: 0,
         lapStarted: 0, lastLap: null, bestLap: null,
     });
     const lane = Math.min(.9, track.width * .19);
@@ -61,6 +61,7 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP, track: CircuitRun
         const powerW = Math.max(0, tractive * speed) / .82 + 12;
         const completed = Math.floor(distance / track.length) > Math.floor(car.distance / track.length);
         const lapTime = elapsed - car.lapStarted;
+        const lapWh = car.consumptionWh + powerW * dt / 3600;
         const turn = angle(ahead.heading - here.heading);
         return {
             ...car, distance, speed, acceleration, powerW,
@@ -68,7 +69,9 @@ export function stepRace(world: RaceWorld, delta = FIXED_STEP, track: CircuitRun
             steering: clamp(turn * 5, -1, 1),
             throttle: clamp(tractive / Math.max(1, availableForce), 0, 1),
             brake: clamp(-tractive / (2.6 * mass), 0, 1),
-            consumptionWh: car.consumptionWh + powerW * dt / 3600,
+            consumptionWh: completed ? 0 : lapWh,
+            lastLapWh: completed ? lapWh : car.lastLapWh,
+            lapHistory: completed ? [lapTime, ...car.lapHistory].slice(0, 5) : car.lapHistory,
             motorTemp: car.motorTemp + (powerW * .20 - (car.motorTemp - 24) * 2) * dt / 800,
             batteryTemp: car.batteryTemp + (powerW * .045 - (car.batteryTemp - 24) * .9) * dt / 6000,
             lapStarted: completed ? elapsed : car.lapStarted,
@@ -124,6 +127,7 @@ export function stepPlayerCar(car: RaceVehicle, input: DrivingInput, delta: numb
     const completed = crossedStart;
     const lapTime = elapsed - car.lapStarted;
     const powerW = throttle > 0 ? motorForce * speed / .82 : 12;
+    const lapWh = car.consumptionWh + powerW * dt / 3600;
     return {
         ...car,
         distance,
@@ -141,7 +145,9 @@ export function stepPlayerCar(car: RaceVehicle, input: DrivingInput, delta: numb
         throttle,
         brake,
         powerW,
-        consumptionWh: car.consumptionWh + powerW * dt / 3600,
+        consumptionWh: completed ? 0 : lapWh,
+        lastLapWh: completed ? lapWh : car.lastLapWh,
+        lapHistory: completed ? [lapTime, ...car.lapHistory].slice(0, 5) : car.lapHistory,
         motorTemp: car.motorTemp + (powerW * .20 - (car.motorTemp - 24) * 2) * dt / 800,
         batteryTemp: car.batteryTemp + (powerW * .045 - (car.batteryTemp - 24) * .9) * dt / 6000,
         lapStarted: completed ? elapsed : car.lapStarted,

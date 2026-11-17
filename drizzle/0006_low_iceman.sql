@@ -1,0 +1,1 @@
+ALTER TABLE `race_replays` ADD `mg_wh` real NOT NULL;

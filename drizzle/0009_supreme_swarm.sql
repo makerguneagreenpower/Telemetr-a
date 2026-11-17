@@ -1,0 +1,1 @@
+ALTER TABLE `race_replays` ADD `track_length` real NOT NULL;

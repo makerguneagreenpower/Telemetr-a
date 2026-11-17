@@ -29,16 +29,19 @@ test('una cuesta del 13 % se sube sin que el coche se quede parado', () => {
 test('con desnivel la vuelta es más lenta y gasta más que en llano', () => {
     const lapFlat = race(flat, 400), lapHill = race(hill(20), 400);
     assert.ok(lapHill.cars[0].lastLap! > lapFlat.cars[0].lastLap!);
-    assert.ok(lapHill.cars[0].consumptionWh / lapHill.cars[0].distance > lapFlat.cars[0].consumptionWh / lapFlat.cars[0].distance);
+    assert.ok(lapHill.cars[0].lastLapWh! / flat.length > lapFlat.cars[0].lastLapWh! / flat.length);
 });
 
-test('sin frenada regenerativa: el consumo nunca baja y la potencia nunca es negativa', () => {
-    let previous = 0, minimum = Infinity;
+test('sin frenada regenerativa: Wh por vuelta no se acumula entre vueltas', () => {
+    let minimum = Infinity, sawReset = false, previous = 0;
     race(hill(30), 300, world => {
         for (const car of world.cars) { minimum = Math.min(minimum, car.powerW); }
         const used = world.cars[0].consumptionWh;
-        assert.ok(used >= previous, 'el consumo acumulado no puede disminuir'); previous = used;
+        assert.ok(used >= 0, 'la energía de la vuelta debe ser positiva');
+        if (used < previous) sawReset = true;
+        previous = used;
     });
+    assert.ok(sawReset, 'los Wh de la vuelta actual se reinician al cruzar meta');
     assert.ok(minimum >= 0, `potencia mínima ${minimum} W`);
 });
 
@@ -116,13 +119,15 @@ test('mantener el freno detiene el coche', () => {
     assert.equal(car.speed, 0);
 });
 
-test('el piloto registra vueltas y mantiene el consumo monotónico', () => {
-    const car = { ...createRaceWorld(flat).cars[0], distance: flat.length - 1, speed: 8, lapStarted: 2 };
+test('el piloto registra vueltas y reinicia los Wh por vuelta', () => {
+    const car = { ...createRaceWorld(flat).cars[0], distance: flat.length - 1, speed: 8, lapStarted: 2, consumptionWh: 1 };
     let next = car;
     for (let index = 1; index <= 10; index++) {
         next = stepPlayerCar(next, { throttle: 1, brake: 0, steering: 0 }, FIXED_STEP, flat, 10 + index * FIXED_STEP);
     }
     assert.notEqual(next.lastLap, null);
     assert.equal(next.bestLap, next.lastLap);
-    assert.ok(next.consumptionWh >= car.consumptionWh);
+    assert.ok(next.lastLapWh !== null && next.lastLapWh > car.consumptionWh);
+    assert.ok(next.consumptionWh < next.lastLapWh);
+    assert.equal(next.lapHistory[0], next.lastLap);
 });

@@ -30,7 +30,7 @@ function ElevationProfile({ runtime }: { runtime: CircuitRuntime }) {
 }
 function filename(name: string) { return name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w-]+/g,'-').slice(0,70) || 'circuito'; }
 
-export default function CircuitsEditor({ onRace }: { onRace: () => void }) {
+export default function CircuitsEditor({ onRace, user }: { onRace: () => void; user: boolean }) {
     const library = useCircuits();
     const [mode, setMode] = useState<'image' | 'map'>('image');
     const [name, setName] = useState(''), [competition, setCompetition] = useState(''), [width, setWidth] = useState('6');
@@ -101,8 +101,19 @@ export default function CircuitsEditor({ onRace }: { onRace: () => void }) {
     }
     async function save(useInRace=false) {
         if(!preview.definition||!name.trim())return;setBusy(true);setError('');
-        try { const circuit={...preview.definition,id:editingId??crypto.randomUUID(),updatedAt:new Date().toISOString()};await saveCircuit(circuit);setEditingId(circuit.id);setMessage('Circuito guardado en este navegador. Exporta una copia para compartirlo con el equipo.');if(useInRace){setActiveCircuit(circuit.id);onRace();} }
-        catch(error){setError(errorMessage(error));}finally{setBusy(false);}
+        try {
+            const circuit={...preview.definition,id:editingId??crypto.randomUUID(),updatedAt:new Date().toISOString()};
+            await saveCircuit(circuit);
+            if(user){
+                const response=await fetch('/api/circuits-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(circuit)});
+                const result=await response.json() as {error?:string};
+                if(!response.ok)throw new Error(result.error??'No se pudo sincronizar el circuito con la base de datos.');
+                setMessage('Circuito guardado en este navegador y sincronizado con la base de datos del equipo.');
+            }else setMessage('Circuito guardado en este navegador. Inicia sesión para guardarlo también en la base de datos del equipo.');
+            setEditingId(circuit.id);if(useInRace){setActiveCircuit(circuit.id);onRace();}
+        }
+        catch(error){setError(errorMessage(error));}
+        finally{setBusy(false);}
     }
     async function loadTerrain() {
         if(geoPoints.length<3){setError('Traza al menos tres puntos sobre el mapa antes de pedir las alturas.');return;}
@@ -117,8 +128,8 @@ export default function CircuitsEditor({ onRace }: { onRace: () => void }) {
         finally{if(terrainRequest.current===controller){terrainRequest.current=null;setTerrainBusy(false);}}
     }
     function selectCircuit(circuit:CircuitDefinition){try{setActiveCircuit(circuit.id);onRace();}catch(error){setError(errorMessage(error));}}
-    async function remove(circuit:CircuitDefinition){try{await deleteCircuit(circuit.id);setDeleted(circuit);setMessage(`«${circuit.name}» eliminado. Puedes deshacerlo.`);}catch(error){setError(errorMessage(error));}}
-    async function restore(){if(!deleted)return;try{await saveCircuit(deleted);setDeleted(undefined);setMessage('Circuito restaurado.');}catch(error){setError(errorMessage(error));}}
+    async function remove(circuit:CircuitDefinition){try{if(user){const response=await fetch(`/api/circuits-db?id=${encodeURIComponent(circuit.id)}`,{method:'DELETE'});const result=await response.json() as {error?:string};if(!response.ok)throw new Error(result.error??'No se pudo eliminar el circuito de la base de datos.');}await deleteCircuit(circuit.id);setDeleted(circuit);setMessage(`«${circuit.name}» eliminado${user?' de la base de datos y del navegador':''}. Puedes deshacerlo.`);}catch(error){setError(errorMessage(error));}}
+    async function restore(){if(!deleted)return;try{if(user){const response=await fetch('/api/circuits-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(deleted)});const result=await response.json() as {error?:string};if(!response.ok)throw new Error(result.error??'No se pudo restaurar el circuito en la base de datos.');}await saveCircuit(deleted);setDeleted(undefined);setMessage('Circuito restaurado.');}catch(error){setError(errorMessage(error));}}
     function exportCircuit(circuit:CircuitDefinition,kml=false){try{download(`${filename(circuit.name)}.${kml?'kml':'json'}`,kml?circuitKml(circuit):JSON.stringify(circuit,null,2),kml?'application/vnd.google-earth.kml+xml':'application/json');}catch(error){setError(errorMessage(error));}}
     function locate(){const latitude=Number(lat.replace(',','.')),longitude=Number(lng.replace(',','.'));if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>85||Math.abs(longitude)>180){setError('Introduce una latitud y una longitud válidas.');return;}setLat(String(latitude));setLng(String(longitude));setCenter(old=>({lat:latitude,lng:longitude,revision:old.revision+1}));setError('');}
     const filtered=library.circuits.filter(c=>`${c.name} ${c.competition}`.toLocaleLowerCase('es').includes(query.toLocaleLowerCase('es')));

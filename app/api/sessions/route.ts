@@ -1,9 +1,10 @@
 import {env} from 'cloudflare:workers';
 import {getChatGPTUser} from '../../chatgpt-auth';
-import {normalize,validateSessionDetails} from '../../../lib/telemetry';
-export async function GET(){
+import {normalize,stats,validateSessionDetails} from '../../../lib/telemetry';
+export async function GET(req:Request){
  const user=await getChatGPTUser();if(!user)return Response.json({error:'Inicia sesión para consultar tus archivos.'},{status:401});
- try{const result=await env.DB!.prepare('SELECT id,name,created_at as createdAt,car_category as carCategory,car_id as carId,session_type as sessionType,event_date as eventDate,session_context as sessionContext,object_key as objectKey FROM sessions WHERE owner = ? ORDER BY created_at DESC LIMIT 50').bind(user.userId).all();
+ try{const metadata=new URL(req.url).searchParams.get('metadata')==='1';const result=await env.DB!.prepare('SELECT id,name,created_at as createdAt,car_category as carCategory,car_id as carId,session_type as sessionType,event_date as eventDate,session_context as sessionContext,object_key as objectKey FROM sessions WHERE owner = ? ORDER BY created_at DESC LIMIT 50').bind(user.userId).all();
+ if(metadata){const items=await Promise.all(result.results.map(async(row)=>{const obj=await env.BUCKET!.get(String(row.objectKey));if(!obj)throw new Error('Archivo no disponible');const rows=normalize(JSON.parse(await obj.text()));return {id:row.id,name:row.name,createdAt:row.createdAt,carCategory:row.carCategory,carId:row.carId,sessionType:row.sessionType,eventDate:row.eventDate,sessionContext:row.sessionContext??'race-day',stats:stats(rows)};}));return Response.json({items},{headers:{'Cache-Control':'private, no-store'}});}
  const data=await Promise.all(result.results.map(async(row)=>{const obj=await env.BUCKET!.get(String(row.objectKey));if(!obj)throw new Error('Archivo no disponible');return {id:row.id,name:row.name,createdAt:row.createdAt,carCategory:row.carCategory,carId:row.carId,sessionType:row.sessionType,eventDate:row.eventDate,sessionContext:row.sessionContext??'race-day',samples:JSON.parse(await obj.text())};}));
  return Response.json(data,{headers:{'Cache-Control':'private, no-store'}});
  }catch{ return Response.json({error:'No se han podido recuperar las sesiones. Vuelve a intentarlo.'},{status:503});}

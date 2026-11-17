@@ -43,9 +43,13 @@ La vista inicial «Resumen general» muestra solo la tabla de la sesión. «Coch
 
 El botón de la esquina inferior derecha cambia entre el tema claro y el oscuro en todas las páginas. La preferencia se conserva en este navegador; solo se guarda la preferencia visual, no la telemetría.
 
-«Carrera» (`/carrera`) muestra una **carrera 3D simulada compartida**, sin conexión a hardware, con un coche blanco y otro negro/rojo compitiendo en el mismo circuito. Ambos parten de la parrilla y avanzan con un modelo simplificado de aceleración, frenada, potencia y velocidad en curvas. Un único reloj integra el movimiento a 60 pasos por segundo: la escena, el mapa con dos marcadores, la clasificación por distancia y los cronos de vuelta comparten ese estado. Hay cámaras conjunta, a bordo de cada coche y aérea. La pausa, continuación y reinicio afectan a toda la carrera. La pestaña en segundo plano no provoca un salto de minutos al regresar. Three.js se carga bajo demanda al entrar en Carrera y libera recursos al salir; si WebGL no está disponible, la carrera continúa visible en el mapa.
+«Carrera» (`/carrera`) muestra una carrera 3D simulada compartida, sin conexión a hardware. El HUD de diseño propio superpone en cámara el circuito, clasificación, velocidad, temperaturas, cronos y energía por vuelta. El coche MGRT puede acompañarse de una sesión importada de Telemetría: sus muestras se muestran con el tiempo de carrera; el rival usa valores plausibles generados por la simulación y se identifica como simulado. Las últimas vueltas y mejores tiempos proceden del mismo estado que la escena, el mapa y la clasificación. «Carrera terminada» guarda una repetición reproducible en la cuenta del equipo. Las muestras se capturan aproximadamente cada segundo.
 
-Las dos pantallas de telemetría permanecen visibles, en columnas o apiladas según el ancho. Muestran temperatura del motor, temperatura de las dos baterías, velocidad en km/h y consumo acumulado en Wh integrado desde la potencia eléctrica. Los límites estrictos y las alertas rojas se mantienen: motor >50 °C, baterías >40 °C, velocidad >40 km/h y energía >7 Wh. La instrumentación muestra acelerador, freno, dirección y RPM estimadas. El modelo no está calibrado contra un coche real; las lecturas no se guardan ni se mezclan con sesiones importadas. El antiguo clip de referencia no se usa en la carrera compartida.
+Las dos pantallas de telemetría muestran motor, batería, velocidad, acelerador, freno, dirección y RPM estimadas. La energía se expresa en Wh por vuelta: se reinicia al cruzar la meta y también se conserva el valor de la vuelta anterior, no un total acumulado de toda la carrera. La repetición incluye muestras de ambos coches, el circuito y una referencia opcional a una sesión importada.
+
+## Base de datos del equipo
+
+La sección «Base de datos» agrupa las repeticiones por evento y sesión, resume los datos importados por coche y compara carreras, coches y circuitos únicamente con elementos del mismo tipo. Las repeticiones se reproducen en la escena 3D y permiten recorrer las muestras. D1 guarda metadatos y estadísticas; R2 conserva el circuito completo, la telemetría de la repetición y los datos de circuitos. Las consultas y escrituras requieren iniciar sesión y filtran por propietario. Los circuitos creados anteriormente permanecen en IndexedDB local; los guardados desde Circuitos con sesión iniciada también se sincronizan con D1/R2.
 
 
 ## Otros equipos
@@ -68,7 +72,7 @@ La generación requiere iniciar sesión y se ejecuta únicamente al pulsar el bo
 
 ## Circuitos de cada carrera
 
-La sección **Circuitos** (`/circuitos`) prepara recorridos para la simulación de los dos coches. Cada circuito tiene nombre, competición, ancho de pista, meta y sentido. La biblioteca se guarda en IndexedDB del navegador; la selección activa se recuerda localmente. No se sincroniza con la cuenta: exporta el JSON para compartirlo o conservar una copia en otro dispositivo.
+La sección **Circuitos** (`/circuitos`) prepara recorridos para la simulación de los dos coches. Cada circuito tiene nombre, competición, ancho de pista, meta y sentido. La biblioteca se guarda en IndexedDB del navegador; la selección activa se recuerda localmente. Al guardar con la cuenta iniciada, una copia se sincroniza con D1/R2 y aparece en «Base de datos». Exporta el JSON para compartirlo o conservar una copia adicional.
 
 - **Imagen:** sube PNG/JPG/WebP de hasta 6 MB, marca dos puntos A–B e introduce una distancia conocida en metros. Traza la línea central en orden; puedes arrastrar, eliminar, deshacer, invertir el sentido y elegir otro punto como meta. La escala permite reproducir la longitud, pero la precisión depende del plano y de la calibración. La imagen original y la calibración se incluyen en el JSON.
 - **Mapa:** sitúa el editor por latitud/longitud y marca el recorrido sobre OpenStreetMap. Puede abrirse la ubicación en Google Maps.

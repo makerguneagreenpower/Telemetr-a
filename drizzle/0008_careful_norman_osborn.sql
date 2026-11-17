@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `circuits_owner_circuit_id` ON `circuits` (`owner`,`circuit_id`);

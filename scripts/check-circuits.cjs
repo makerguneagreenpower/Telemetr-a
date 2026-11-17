@@ -16,7 +16,7 @@ const routes=lib.parseGeographicRoutes(JSON.stringify({type:'FeatureCollection',
 assert.throws(()=>lib.parseGeographicRoutes('{bad','geojson'));assert.throws(()=>lib.parseGeographicRoutes('{"type":"Point","coordinates":[0,0]}','geojson'));assert.throws(()=>lib.validateCircuit({...square,source:'image'}));
 const xml=lib.circuitKml({...geo,name:'Pista <A> & equipo'});assert(xml.includes('Pista &lt;A&gt; &amp; equipo'));assert(xml.includes('-2.9,43.3,0'));
 for(const circuit of [track,lib.createCircuitRuntime(wide),geoTrack]){
- let state=engine.createRaceWorld(circuit);for(let i=0;i<60*180;i++){const before=state;state=engine.stepRace(state,1/60,circuit);state.cars.forEach((car,j)=>{assert(Object.values(car).filter(v=>typeof v==='number').every(Number.isFinite));assert(car.distance>=before.cars[j].distance);assert(car.consumptionWh>=before.cars[j].consumptionWh);const pose=engine.vehiclePose(car,circuit);assert(Number.isFinite(pose.x)&&Number.isFinite(pose.heading));});}
+ let state=engine.createRaceWorld(circuit);for(let i=0;i<60*180;i++){const before=state;state=engine.stepRace(state,1/60,circuit);state.cars.forEach((car,j)=>{assert(Object.values(car).filter(v=>typeof v==='number').every(Number.isFinite));assert(car.distance>=before.cars[j].distance);assert(car.consumptionWh>=0);assert(car.lastLapWh===null||car.lastLapWh>=0);const pose=engine.vehiclePose(car,circuit);assert(Number.isFinite(pose.x)&&Number.isFinite(pose.heading));});}
  assert(state.cars.every(c=>c.distance>500));console.log('OK circuito',circuit.length.toFixed(2),'m',state.cars.map(c=>c.distance.toFixed(1)).join(' / '));
 }
 console.log('OK: escala de imagen, coordenadas, meta/sentido, formatos, validaciones y simulación en tres trazados.');

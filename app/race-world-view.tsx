@@ -5,17 +5,19 @@ import { Expand, Flag, Video } from 'lucide-react';
 import { raceOrder, vehiclePose, type RaceWorld } from '../lib/race-engine';
 import type { CircuitRuntime } from '../lib/circuits';
 import type { RaceCamera } from '../lib/race-3d';
+import type { Sample } from '../lib/telemetry';
 
-const cameraModes: { id: RaceCamera; label: string }[] = [{ id: 'duel', label: 'Los dos coches' }, { id: 'car-1', label: 'A bordo · 01' }, { id: 'car-2', label: 'A bordo · 02' }, { id: 'aerial', label: 'Vista aérea' }];
+const cameraModes: { id: RaceCamera; label: string }[] = [{ id: 'duel', label: 'Los dos coches' }, { id: 'car-1', label: 'A bordo · MGRT 01' }, { id: 'car-2', label: 'A bordo · rival' }, { id: 'aerial', label: 'Vista aérea' }];
 const time = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 
-export default function RaceWorldView({ worldRef, world, running, track }: { worldRef: RefObject<RaceWorld>; world: RaceWorld; running: boolean; track: CircuitRuntime }) {
+export default function RaceWorldView({ worldRef, world, running, track, mgTelemetry }: { worldRef: RefObject<RaceWorld>; world: RaceWorld; running: boolean; track: CircuitRuntime; mgTelemetry?: Sample | null }) {
     const canvas = useRef<HTMLCanvasElement>(null), frame = useRef<HTMLDivElement>(null);
     const [mode, setMode] = useState<RaceCamera>('duel');
     const modeRef = useRef(mode);
     const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [retry, setRetry] = useState(0), [fullscreenError, setFullscreenError] = useState('');
     const order = raceOrder(world);
+    const focus = mode === 'car-2' ? world.cars[1] : mode === 'car-1' ? world.cars[0] : order[0];
     useEffect(() => { modeRef.current = mode; }, [mode]);
 
     useEffect(() => {
@@ -58,14 +60,30 @@ export default function RaceWorldView({ worldRef, world, running, track }: { wor
                 {status === 'error' && <div className="race-world-placeholder"><p>La vista 3D no está disponible en este navegador. Los dos coches siguen corriendo en el circuito de abajo.</p><button type="button" className="secondary" onClick={() => { setStatus('loading'); setRetry(value => value + 1); }}>Reintentar 3D</button></div>}
                 <div className="race-world-broadcast"><span><i className={running ? 'broadcast-dot' : ''} />{running ? 'SIMULACIÓN EN MARCHA' : 'CARRERA PAUSADA'}</span><strong>{time(world.elapsed)}</strong></div>
                 <div className="race-world-timing" aria-label="Orden actual de carrera">{order.map((car, rank) => <div key={car.id}><b>{rank + 1}</b><span className={`race-mini-swatch ${car.id}`} /><span>Coche {car.id === 'car-1' ? '1' : '2'}</span><strong>{(car.speed * 3.6).toFixed(0)} <small>km/h</small></strong></div>)}</div>
+                <aside className="race-camera-information" aria-label="Información del circuito">
+                    <strong>{track.name}</strong><span>{Math.round(track.length).toLocaleString('es-ES')} m · {track.width.toLocaleString('es-ES')} m de ancho</span>
+                    <span>{focus.id === 'car-1' ? 'MGRT · MG01' : 'RIVAL SIMULADO'}</span>
+                    <div><b>{(focus.speed * 3.6).toFixed(0)}</b><span>km/h · V{Math.floor(focus.distance / track.length) + 1}</span></div>
+                    <span>Motor {focus.motorTemp.toFixed(1)} °C · batería {focus.batteryTemp.toFixed(1)} °C</span>
+                    <span>Vuelta {time(world.elapsed - focus.lapStarted)} · mejor {focus.bestLap === null ? '—' : time(focus.bestLap)}</span>
+                    <span>Energía vuelta: {focus.consumptionWh.toFixed(2)} Wh</span>
+                    {focus.lapHistory.length > 0 && <span>Última vuelta: {time(focus.lapHistory[0])} · {focus.lastLapWh?.toFixed(2) ?? '—'} Wh</span>}
+                </aside>
+                {mgTelemetry && <aside className="race-camera-telemetry" aria-label="Muestra importada de telemetría MGRT">
+                    <strong>MGRT · TELEMETRÍA REAL</strong>
+                    <span>{mgTelemetry.pilot} · t={time(mgTelemetry.time)}</span>
+                    <div><b>{mgTelemetry.speed.toFixed(1)}</b><span>km/h GPS</span></div>
+                    <span>Motor {mgTelemetry.motorTemp?.toFixed(1) ?? '—'} °C · batería {mgTelemetry.batteryTemp?.toFixed(1) ?? '—'} °C</span>
+                    <span>Motor {mgTelemetry.motorRpm?.toLocaleString('es-ES') ?? '—'} rpm · rueda {mgTelemetry.wheelRpm?.toLocaleString('es-ES') ?? '—'} rpm</span>
+                </aside>}
             </div>
             {track.elevation.hasElevation && <ElevationStrip world={world} track={track} />}
             {fullscreenError && <p className="race-media-note" role="status">{fullscreenError}</p>}
             <p className="race-media-note">Escena 3D interactiva, no vídeo grabado. Física simplificada con aceleración, frenada, curvas y consumo; sin conexión a coches ni cámaras reales.</p>
         </section>
         <div className="race-shared-overview">
-            <section className="panel race-shared-track"><div className="panel-heading"><div><h2><Flag size={18} />{track.name}</h2><p>{Math.round(track.length)} m · posiciones de ambos coches</p></div></div><SharedCircuit world={world} track={track} /><div className="race-track-legend"><span><i className="race-mini-swatch car-1" />Coche 1 · blanco</span><span><i className="race-mini-swatch car-2" />Coche 2 · negro/rojo</span></div></section>
-            <section className="panel race-classification"><div className="panel-heading"><div><h2>Clasificación en vivo</h2><p>Orden por distancia recorrida, incluyendo las vueltas completas</p></div></div>{order.map((car, rank) => <div className="race-position-row" key={car.id}><b>{rank + 1}</b><span className={`race-car-swatch ${car.id}`} /><div><strong>Coche {car.id === 'car-1' ? '1' : '2'}</strong><small>Vuelta {Math.floor(car.distance / track.length) + 1} · {car.distance.toLocaleString('es-ES', { maximumFractionDigits: 0 })} m recorridos</small></div><span>{rank === 0 ? 'Líder' : `A ${(order[0].distance - car.distance).toLocaleString('es-ES', { maximumFractionDigits: 1 })} m`}</span></div>)}<p className="race-media-note">Las diferencias de ritmo cambian con las curvas y la entrega de potencia de cada coche. La cámara, el mapa y las lecturas comparten el mismo estado de carrera.</p></section>
+            <section className="panel race-shared-track"><div className="panel-heading"><div><h2><Flag size={18} />{track.name}</h2><p>{Math.round(track.length)} m · posiciones de ambos coches</p></div></div><SharedCircuit world={world} track={track} /><div className="race-track-legend"><span><i className="race-mini-swatch car-1" />MGRT · MG01</span><span><i className="race-mini-swatch car-2" />Rival · datos simulados</span></div></section>
+            <section className="panel race-classification"><div className="panel-heading"><div><h2>Clasificación en vivo</h2><p>Orden por distancia recorrida, incluyendo las vueltas completas</p></div></div>{order.map((car, rank) => <div className="race-position-row" key={car.id}><b>{rank + 1}</b><span className={`race-car-swatch ${car.id}`} /><div><strong>{car.id === 'car-1' ? 'MGRT · MG01' : 'Rival simulado'}</strong><small>Vuelta {Math.floor(car.distance / track.length) + 1} · {car.distance.toLocaleString('es-ES', { maximumFractionDigits: 0 })} m · última {car.lastLap === null ? '—' : time(car.lastLap)} · mejor {car.bestLap === null ? '—' : time(car.bestLap)}</small></div><span>{rank === 0 ? 'Líder' : `A ${(order[0].distance - car.distance).toLocaleString('es-ES', { maximumFractionDigits: 1 })} m`}</span></div>)}<p className="race-media-note">El rival es una referencia generada localmente, no datos reales de otro equipo. La cámara, el mapa y las lecturas comparten el estado de carrera.</p></section>
         </div>
     </>;
 }
