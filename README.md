@@ -14,6 +14,12 @@ En «Crear circuito», dibuja o importa el recorrido con coordenadas geográfica
 
 El apartado «Simulador» permite conducir el coche 3D Greenpower por un circuito guardado o el de demostración. Usa ↑ para acelerar, ↓ o espacio para frenar y ←/→ para girar (también W/A/S/D), o selecciona volante/Gamepad compatible con Gamepad API del navegador; dirección, acelerador y freno se leen del primer dispositivo conectado. Si el coche sale del trazado, aparece un aviso; volver a la pista cancela la cuenta atrás. Si permanece fuera durante 5 segundos, ambos coches y la carrera se reinician desde cero. Simulación arcade sin conexión al coche real.
 
+### Integración de Twitch en Carrera
+
+La sección Carrera puede conectar una cuenta de Twitch con OAuth, consultar el directo propio y los canales seguidos que estén en emisión mediante Helix, y mostrar el reproductor oficial y el chat. Registra una aplicación en Twitch Developer Console y configura los secretos del servidor `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` y `TWITCH_TOKEN_ENCRYPTION_KEY` (clave privada de al menos 32 caracteres; no se debe enviar al cliente ni guardar en Git). Registra como OAuth Redirect URL `https://<dominio>/api/twitch/callback` para cada dominio de despliegue. La aplicación solicita `user:read:email` y `user:read:follows`. El token OAuth se cifra con AES-GCM antes de guardarse en una cookie HttpOnly, SameSite=Lax y Secure en HTTPS. Autoriza también cada dominio usado por el reproductor/chat de Twitch.
+
+Twitch no ofrece un endpoint de API para iniciar o detener una emisión ni para obtener la clave de emisión. Para emitir, inicia sesión y configura OBS con la cuenta de Twitch; comienza y detén la emisión desde OBS. No introduzcas la clave de emisión en esta web. La integración web muestra el panel del creador y permite ver el estado/directos y chatear desde el embed oficial.
+
 ## Meter datos
 
 La sección «Meter datos» ofrece documento o entrada manual. Ambos métodos crean una nueva sesión con fecha, coche y contexto. El documento se valida y muestra una vista previa antes de pulsar «Guardar sesión». La entrada manual permite añadir, editar y eliminar filas; los datos permanecen en el formulario si falla el guardado. Se utiliza la misma validación y almacenamiento D1/R2.

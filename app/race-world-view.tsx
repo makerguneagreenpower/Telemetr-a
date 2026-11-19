@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
-import { Expand, Flag, Video } from 'lucide-react';
+import { Expand, ExternalLink, Flag, Radio, Video } from 'lucide-react';
 import { raceOrder, vehiclePose, type RaceWorld } from '../lib/race-engine';
 import type { CircuitRuntime } from '../lib/circuits';
 import type { RaceCamera } from '../lib/race-3d';
@@ -9,6 +9,8 @@ import type { Sample } from '../lib/telemetry';
 
 const cameraModes: { id: RaceCamera; label: string }[] = [{ id: 'duel', label: 'Los dos coches' }, { id: 'car-1', label: 'A bordo · MGRT 01' }, { id: 'car-2', label: 'A bordo · rival' }, { id: 'aerial', label: 'Vista aérea' }];
 const time = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+type TwitchStream = { id: string; user_login: string; user_name: string; game_name: string; title: string; viewer_count: number; started_at: string; thumbnail_url: string };
+type TwitchAccount = { configured: boolean; user: { id: string; login: string; displayName: string; profileImageUrl: string } | null; streams: TwitchStream[]; error?: string };
 
 export default function RaceWorldView({ worldRef, world, running, track, mgTelemetry }: { worldRef: RefObject<RaceWorld>; world: RaceWorld; running: boolean; track: CircuitRuntime; mgTelemetry?: Sample | null }) {
     const canvas = useRef<HTMLCanvasElement>(null), frame = useRef<HTMLDivElement>(null);
@@ -16,9 +18,29 @@ export default function RaceWorldView({ worldRef, world, running, track, mgTelem
     const modeRef = useRef(mode);
     const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
     const [retry, setRetry] = useState(0), [fullscreenError, setFullscreenError] = useState('');
+    const [twitchChannel, setTwitchChannel] = useState('');
+    const [activeTwitchChannel, setActiveTwitchChannel] = useState('');
+    const [twitchParent, setTwitchParent] = useState('');
+    const [twitchError, setTwitchError] = useState('');
+    const [twitchAccount, setTwitchAccount] = useState<TwitchAccount | null>(null);
+    const [twitchLoading, setTwitchLoading] = useState(true);
+    const [twitchReload, setTwitchReload] = useState(0);
     const order = raceOrder(world);
     const focus = mode === 'car-2' ? world.cars[1] : mode === 'car-1' ? world.cars[0] : order[0];
     useEffect(() => { modeRef.current = mode; }, [mode]);
+    useEffect(() => {
+        const controller = new AbortController();
+        fetch('/api/twitch/account', { signal: controller.signal }).then(async response => {
+            const result = await response.json() as TwitchAccount;
+            if (!response.ok && response.status !== 401) throw new Error(result.error ?? 'No se pudo consultar la cuenta de Twitch.');
+            setTwitchAccount(result);
+        }).catch(error => {
+            if (!controller.signal.aborted) setTwitchAccount({ configured: false, user: null, streams: [], error: error instanceof Error ? error.message : 'No se pudo conectar con Twitch.' });
+        }).finally(() => {
+            if (!controller.signal.aborted) setTwitchLoading(false);
+        });
+        return () => controller.abort();
+    }, [twitchReload]);
 
     useEffect(() => {
         let active = true, animation = 0;
@@ -48,6 +70,32 @@ export default function RaceWorldView({ worldRef, world, running, track, mgTelem
     async function fullscreen() {
         try { if (document.fullscreenElement) await document.exitFullscreen(); else await frame.current?.requestFullscreen(); setFullscreenError(''); }
         catch { setFullscreenError('No se ha podido abrir la pantalla completa.'); }
+    }
+
+    function showTwitchStream(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        const channel = twitchChannel.trim();
+        if (!/^[a-zA-Z0-9_]{1,25}$/.test(channel)) {
+            setTwitchError('Introduce el nombre del canal de Twitch, sin la dirección web.');
+            setActiveTwitchChannel('');
+            return;
+        }
+        setTwitchError('');
+        setTwitchParent(window.location.hostname);
+        setActiveTwitchChannel(channel);
+    }
+
+    async function disconnectTwitch() {
+        try {
+            const response = await fetch('/api/twitch/account', { method: 'POST' });
+            if (!response.ok) throw new Error('No se pudo cerrar la sesión de Twitch.');
+            const result = await response.json() as { revoked?: boolean };
+            setTwitchAccount(account => account ? { ...account, user: null, streams: [] } : account);
+            setActiveTwitchChannel('');
+            setTwitchError(result.revoked ? '' : 'Se cerró la sesión en esta web, pero Twitch no confirmó la revocación del token.');
+        } catch (error) {
+            setTwitchError(error instanceof Error ? error.message : 'No se pudo cerrar la sesión de Twitch.');
+        }
     }
 
     return <>
@@ -80,6 +128,63 @@ export default function RaceWorldView({ worldRef, world, running, track, mgTelem
             {track.elevation.hasElevation && <ElevationStrip world={world} track={track} />}
             {fullscreenError && <p className="race-media-note" role="status">{fullscreenError}</p>}
             <p className="race-media-note">Escena 3D interactiva, no vídeo grabado. Física simplificada con aceleración, frenada, curvas y consumo; sin conexión a coches ni cámaras reales.</p>
+            <details className="race-twitch-panel">
+                <summary><Radio size={18} /><span><strong>Twitch en MGRT</strong><small>Inicia sesión, consulta directos, chat y emisión con OBS</small></span></summary>
+                {twitchLoading ? <p className="race-twitch-message" role="status">Comprobando la conexión con Twitch…</p> : twitchAccount?.user
+                    ? <div className="race-twitch-account">
+                        <div><strong>{twitchAccount.user.displayName}</strong><span>@{twitchAccount.user.login} · sesión conectada</span></div>
+                        <button type="button" className="text-button" onClick={disconnectTwitch}>Cerrar sesión</button>
+                    </div>
+                    : <div className="race-twitch-login">
+                        {twitchAccount?.configured
+                            ? <><p>Conecta tu cuenta para cargar tus directos y los canales que sigues.</p><a className="secondary" href="/api/twitch/login">Iniciar sesión con Twitch</a></>
+                            : <p>{twitchAccount?.error ?? 'La integración necesita credenciales de Twitch configuradas en el servidor.'} Callback de OAuth: <code>/api/twitch/callback</code>.</p>}
+                    </div>}
+                {twitchAccount?.user && <div className="race-twitch-streams">
+                    <div className="race-twitch-stream-heading"><strong>Directos ahora</strong><button type="button" className="text-button" onClick={() => { setTwitchLoading(true); setTwitchReload(value => value + 1); }}>Actualizar</button></div>
+                    {twitchAccount.error && <p className="race-twitch-message" role="alert">{twitchAccount.error}</p>}
+                    {twitchAccount.streams.length === 0
+                        ? <p className="race-twitch-message">No se detectan directos activos en tu canal ni en los canales que sigues.</p>
+                        : twitchAccount.streams.map(stream => <div className="race-twitch-stream" key={stream.id}>
+                            <div><strong>{stream.user_name}</strong><span>{stream.title || 'En directo'} · {stream.game_name || 'Sin categoría'} · {stream.viewer_count.toLocaleString('es-ES')} espectadores</span></div>
+                            <button type="button" className="secondary" onClick={() => { setTwitchChannel(stream.user_login); setTwitchParent(window.location.hostname); setActiveTwitchChannel(stream.user_login); }}>Ver directo</button>
+                        </div>)}
+                </div>}
+                <div className="race-twitch-obs">
+                    <strong>Emitir con OBS</strong>
+                    <p>La API de Twitch no puede iniciar la emisión. Conecta Twitch en OBS, configura allí la cámara y pulsa «Iniciar transmisión». No compartas tu clave de emisión con esta web.</p>
+                    {twitchAccount?.user && <a href={`https://dashboard.twitch.tv/u/${encodeURIComponent(twitchAccount.user.login)}/stream-manager`} target="_blank" rel="noreferrer">Abrir panel del creador <ExternalLink size={14} /></a>}
+                </div>
+                <form className="race-twitch-form" onSubmit={showTwitchStream}>
+                    <label htmlFor="race-twitch-channel">Ver otro canal<input id="race-twitch-channel" value={twitchChannel} maxLength={25} autoComplete="off" placeholder="nombre_del_canal" onChange={event => { setTwitchChannel(event.target.value); setTwitchError(''); }} /></label>
+                    <button type="submit" className="secondary">Ver canal</button>
+                    {activeTwitchChannel && <button type="button" className="text-button" onClick={() => setActiveTwitchChannel('')}>Quitar directo</button>}
+                </form>
+                {twitchError && <p className="race-twitch-message" role="alert">{twitchError}</p>}
+                <p className="race-twitch-message">El reproductor y el chat se proporcionan mediante embeds oficiales de Twitch. El dominio de esta web debe estar autorizado en la configuración del embed; puedes iniciar sesión en Twitch dentro del chat para participar.</p>
+                {activeTwitchChannel && twitchParent && <div className="race-twitch-player">
+                    <div className="race-twitch-channelbar">
+                        <strong><Radio size={16} />{activeTwitchChannel}</strong>
+                        <a href={`https://www.twitch.tv/${encodeURIComponent(activeTwitchChannel)}`} target="_blank" rel="noreferrer">Abrir en Twitch <ExternalLink size={14} /></a>
+                    </div>
+                    <div className="race-twitch-embeds">
+                        <iframe
+                            key={`player:${activeTwitchChannel}:${twitchParent}`}
+                            src={`https://player.twitch.tv/?channel=${encodeURIComponent(activeTwitchChannel)}&parent=${encodeURIComponent(twitchParent)}&autoplay=false&muted=true`}
+                            title={`Directo de Twitch de ${activeTwitchChannel}`}
+                            allow="autoplay; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                        />
+                        <iframe
+                            key={`chat:${activeTwitchChannel}:${twitchParent}`}
+                            src={`https://www.twitch.tv/embed/${encodeURIComponent(activeTwitchChannel)}/chat?parent=${encodeURIComponent(twitchParent)}`}
+                            title={`Chat de Twitch de ${activeTwitchChannel}`}
+                            loading="lazy"
+                        />
+                    </div>
+                </div>}
+            </details>
         </section>
         <div className="race-shared-overview">
             <section className="panel race-shared-track"><div className="panel-heading"><div><h2><Flag size={18} />{track.name}</h2><p>{Math.round(track.length)} m · posiciones de ambos coches</p></div></div><SharedCircuit world={world} track={track} /><div className="race-track-legend"><span><i className="race-mini-swatch car-1" />MGRT · MG01</span><span><i className="race-mini-swatch car-2" />Rival · datos simulados</span></div></section>
