@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { DEMO_TRACK, type CircuitRuntime } from './circuits';
 import { vehiclePose, type RaceWorld } from './race-engine';
 
-export type RaceCamera = 'duel' | 'car-1' | 'car-2' | 'aerial' | 'player';
+export type RaceCamera = 'duel' | 'car-1' | 'car-2' | 'aerial' | 'player' | 'player-2';
 
-export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime = DEMO_TRACK) {
+export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime = DEMO_TRACK, options:{players?:1|2}={}) {
     const trackPoint = track.point, roadWidth = track.width / 2, barrier = roadWidth + 4, segmentCount = track.samples;
     const extent = Math.max(160, track.bounds.span);
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -136,9 +136,9 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
         for (const side of [-1, 1]) box(group, dark, side * .17, .56, -1.13, .28, .18, .30);
         const motor = mesh(new THREE.CylinderGeometry(.085,.085,.30,16), metal, group, 0,.31,-1.45); motor.rotation.z = Math.PI/2;
         const steering = mesh(new THREE.TorusGeometry(.15,.018,6,20), dark, group, 0,.70,.25); steering.rotation.x = -.35;
-        const wheels: THREE.Group[] = [];
+        const wheels: THREE.Group[] = [], frontHubs: THREE.Group[] = [];
         for (const z of [-1.04, 1.03]) for (const side of [-1, 1]) {
-            const hub = new THREE.Group(); hub.position.set(side * .64, .31, z); group.add(hub);
+            const hub = new THREE.Group(); hub.position.set(side * .64, .31, z); group.add(hub); if(z>0)frontHubs.push(hub);
             const wheel = new THREE.Group(); hub.add(wheel); wheels.push(wheel);
             const tyre = mesh(new THREE.TorusGeometry(.274,.035,8,28), rubber, wheel); tyre.rotation.y = Math.PI / 2;
             const rim = mesh(new THREE.TorusGeometry(.238,.01,5,28), metal, wheel); rim.rotation.y = Math.PI / 2;
@@ -148,30 +148,37 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
         const labelCanvas = document.createElement('canvas'); labelCanvas.width = 128; labelCanvas.height = 56;
         const ctx = labelCanvas.getContext('2d')!; ctx.fillStyle = index ? '#d82439' : '#f2f3ee'; ctx.fillRect(0,0,128,56); ctx.fillStyle = index ? '#fff' : '#242b30'; ctx.font = 'bold 30px sans-serif'; ctx.textAlign='center'; ctx.fillText(index ? '02' : '01',64,39);
         const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(labelCanvas), depthTest: false })); label.position.set(0,1.85,0); label.scale.set(1.15,.5,1); group.add(label);
-        return { group, wheels, label };
+        return { group, wheels, label, frontHubs, steering, helmet, visor, torso };
     }
     const models = [makeCar(0), makeCar(1)];
     const desired = new THREE.Vector3(), target = new THREE.Vector3(), looking = new THREE.Vector3();
     let initialized = false, previousMode: RaceCamera | null = null;
-    let playerOrbitYaw = 0, playerOrbitPitch = .2, playerCameraDistance = 8;
+    const playerOrbits=[{yaw:0,pitch:.2,distance:8},{yaw:0,pitch:.2,distance:8}];
+    let interactionMode:RaceCamera='player',splitActive=false,splitStacked=false,controlledOrbit=0;
+    const orbitAt=(x:number,y:number)=>{
+        const rect=canvas.getBoundingClientRect();
+        return splitActive?(splitStacked?Number(y>=rect.top+rect.height/2):Number(x>=rect.left+rect.width/2)):(interactionMode==='player-2'||interactionMode==='car-2'?1:0);
+    };
     let draggingCamera = false, previousPointerX = 0, previousPointerY = 0;
     const pointerDown = (event: PointerEvent) => {
         draggingCamera = true;
+        controlledOrbit=orbitAt(event.clientX,event.clientY);
         previousPointerX = event.clientX;
         previousPointerY = event.clientY;
         canvas.setPointerCapture(event.pointerId);
     };
     const pointerMove = (event: PointerEvent) => {
         if (!draggingCamera) return;
-        playerOrbitYaw -= (event.clientX - previousPointerX) * .008;
-        playerOrbitPitch = THREE.MathUtils.clamp(playerOrbitPitch + (event.clientY - previousPointerY) * .006, -.05, 1.1);
+        playerOrbits[controlledOrbit].yaw -= (event.clientX - previousPointerX) * .008;
+        playerOrbits[controlledOrbit].pitch = THREE.MathUtils.clamp(playerOrbits[controlledOrbit].pitch + (event.clientY - previousPointerY) * .006, -.05, 1.1);
         previousPointerX = event.clientX;
         previousPointerY = event.clientY;
     };
     const pointerUp = () => { draggingCamera = false; };
     const wheel = (event: WheelEvent) => {
         event.preventDefault();
-        playerCameraDistance = THREE.MathUtils.clamp(playerCameraDistance * Math.exp(event.deltaY * .001), 3, 35);
+        const orbit=playerOrbits[orbitAt(event.clientX,event.clientY)];
+        orbit.distance=THREE.MathUtils.clamp(orbit.distance*Math.exp(event.deltaY*.001),3,35);
     };
     canvas.addEventListener('pointerdown', pointerDown);
     canvas.addEventListener('pointermove', pointerMove);
@@ -179,39 +186,61 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
     canvas.addEventListener('pointercancel', pointerUp);
     canvas.addEventListener('wheel', wheel, { passive: false });
 
-    return {
-        render(world: RaceWorld, mode: RaceCamera, dt: number) {
+    function renderView(world:RaceWorld,mode:RaceCamera,dt:number,viewport?:{x:number;y:number;width:number;height:number}){
             const width = Math.max(1, canvas.clientWidth), height = Math.max(1, canvas.clientHeight), ratio = Math.min(window.devicePixelRatio || 1, 1.5);
             const w = Math.min(1800, Math.round(width * ratio)), h = Math.round(height * w / width);
-            if (canvas.width !== w || canvas.height !== h) { renderer.setSize(w,h,false); camera.aspect=width/height; camera.updateProjectionMatrix(); }
+            if(canvas.width!==w||canvas.height!==h)renderer.setSize(w,h,false);
+            const vx=Math.floor((viewport?.x??0)*w),vy=Math.floor((viewport?.y??0)*h);
+            const vw=Math.max(1,Math.floor(((viewport?.x??0)+(viewport?.width??1))*w)-vx),vh=Math.max(1,Math.floor(((viewport?.y??0)+(viewport?.height??1))*h)-vy);
+            renderer.setViewport(vx,vy,vw,vh);renderer.setScissorTest(!!viewport);
+            if(viewport)renderer.setScissor(vx,vy,vw,vh);
+            if(camera.aspect!==vw/vh){camera.aspect=vw/vh;camera.updateProjectionMatrix();}
             const poses = world.cars.map(car => vehiclePose(car, track));
-            models.forEach((model, index) => { const car=world.cars[index], pose=poses[index]; model.group.visible=mode!=='player'||index===0; model.label.visible=mode!=='player'; model.group.position.set(pose.x, pose.y+Math.sin(car.distance*3)*.004, pose.z); model.group.rotation.set(-Math.atan(pose.grade)-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015); model.wheels.forEach(wheel=>wheel.rotation.x=car.distance/.274); });
-            const center = new THREE.Vector3((poses[0].x+poses[1].x)/2,(poses[0].y+poses[1].y)/2,(poses[0].z+poses[1].z)/2);
+            models.forEach((model, index) => {
+                const car=world.cars[index], pose=poses[index];
+                model.group.visible=(options.players??2)===2||index===0;
+                const cockpit=(mode==='car-1'&&index===0)||(mode==='car-2'&&index===1);
+                model.label.visible=!cockpit;model.helmet.visible=!cockpit;model.visor.visible=!cockpit;model.torso.visible=!cockpit;
+                model.group.position.set(pose.x,pose.y+Math.sin((car.wheelTravel??car.distance)*3)*.004,pose.z);
+                model.group.rotation.set(-Math.atan(pose.grade)-car.acceleration*.012,pose.heading,-car.steering*car.speed*.0015);
+                model.wheels.forEach(wheel=>wheel.rotation.x=(car.wheelTravel??car.distance)/.274);
+                model.frontHubs.forEach(hub=>hub.rotation.y=car.wheelAngle??0);
+                model.steering.rotation.z=-(car.wheelAngle??0)*2.4;
+            });
+            const center = options.players===1?new THREE.Vector3(poses[0].x,poses[0].y,poses[0].z):new THREE.Vector3((poses[0].x+poses[1].x)/2,(poses[0].y+poses[1].y)/2,(poses[0].z+poses[1].z)/2);
             if (mode === 'aerial') { desired.set(extent*.55,meanAltitude+extent*1.15,extent*.75); target.set(0,meanAltitude,0); }
-            else if (mode === 'player' || mode === 'car-1' || mode === 'car-2') {
-                const p=poses[mode==='car-2'?1:0], forward=new THREE.Vector3(Math.sin(p.heading),p.grade,Math.cos(p.heading)).normalize();
-                if(mode==='player'){
+            else if (mode === 'player' || mode === 'player-2' || mode === 'car-1' || mode === 'car-2') {
+                const p=poses[mode==='car-2'||mode==='player-2'?1:0], forward=new THREE.Vector3(Math.sin(p.heading),p.grade,Math.cos(p.heading)).normalize();
+                if(mode==='player'||mode==='player-2'){
+                    const orbitSettings=playerOrbits[mode==='player-2'?1:0];
                     const right = new THREE.Vector3(Math.cos(p.heading), 0, -Math.sin(p.heading));
                     const orbit = new THREE.Vector3()
-                        .addScaledVector(forward, -Math.cos(playerOrbitYaw) * playerCameraDistance * Math.cos(playerOrbitPitch))
-                        .addScaledVector(right, Math.sin(playerOrbitYaw) * playerCameraDistance * Math.cos(playerOrbitPitch));
+                        .addScaledVector(forward, -Math.cos(orbitSettings.yaw) * orbitSettings.distance * Math.cos(orbitSettings.pitch))
+                        .addScaledVector(right, Math.sin(orbitSettings.yaw) * orbitSettings.distance * Math.cos(orbitSettings.pitch));
                     desired.set(p.x, p.y + 1, p.z).add(orbit);
-                    desired.y += playerCameraDistance * Math.sin(playerOrbitPitch);
+                    desired.y += orbitSettings.distance * Math.sin(orbitSettings.pitch);
                     target.set(p.x, p.y + 1, p.z).addScaledVector(forward, 2);
                 }else{
-                    desired.set(p.x,p.y+1.15,p.z).addScaledVector(forward,.10);
+                    desired.set(p.x,p.y+1.02,p.z).addScaledVector(forward,-.36);
                     target.set(p.x,p.y+1.05,p.z).addScaledVector(forward,20);
                 }
             } else {
                 const gap=Math.hypot(poses[0].x-poses[1].x,poses[0].z-poses[1].z), heading=poses[0].heading;
                 desired.copy(center).add(new THREE.Vector3(-Math.sin(heading)*(10+gap*.9)+Math.cos(heading)*7,6+gap*.45,-Math.cos(heading)*(10+gap*.9)-Math.sin(heading)*7)); target.copy(center).add(new THREE.Vector3(0,.5,0));
             }
-            const snap=!initialized||previousMode!==mode||mode==='car-1'||mode==='car-2'||mode==='player';
+            const snap=!initialized||previousMode!==mode||['car-1','car-2','player','player-2'].includes(mode);
             const smoothing=1-Math.exp(-Math.max(.001,dt)*(mode==='player'?8:4));
             if(snap){camera.position.copy(desired);looking.copy(target);}else{camera.position.lerp(desired,smoothing);looking.lerp(target,smoothing);}
             camera.lookAt(looking); initialized=true; previousMode=mode;
             sun.target.position.copy(center); sun.position.copy(center).add(new THREE.Vector3(35,65,25)); sun.target.updateMatrixWorld();
             renderer.render(scene,camera);
+    }
+    return {
+        render(world:RaceWorld,mode:RaceCamera,dt:number){splitActive=false;interactionMode=mode;renderView(world,mode,dt);},
+        renderSplit(world:RaceWorld,dt:number,stacked=false,firstPerson=false){
+            splitActive=true;splitStacked=stacked;
+            renderView(world,firstPerson?'car-1':'player',dt,stacked?{x:0,y:.5,width:1,height:.5}:{x:0,y:0,width:.5,height:1});
+            renderView(world,firstPerson?'car-2':'player-2',dt,stacked?{x:0,y:0,width:1,height:.5}:{x:.5,y:0,width:.5,height:1});
         },
         dispose() {
             canvas.removeEventListener('pointerdown', pointerDown);

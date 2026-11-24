@@ -60,3 +60,21 @@ export function subscribeCircuits(callback: () => void) {
     window.addEventListener(EVENT, callback); window.addEventListener('storage', callback);
     return () => { window.removeEventListener(EVENT, callback); window.removeEventListener('storage', callback); };
 }
+
+// Keep server-backed and browser copies consistent for both editor and simulator.
+export async function deleteSavedCircuit(circuit:CircuitDefinition,user:boolean){
+    if(user){
+        const response=await fetch(`/api/circuits-db?id=${encodeURIComponent(circuit.id)}`,{method:'DELETE'});
+        const result=await response.json() as {error?:string};
+        if(!response.ok)throw new Error(result.error??'No se pudo eliminar el circuito de la base de datos.');
+    }
+    await deleteCircuit(circuit.id);
+}
+export async function restoreSavedCircuit(circuit:CircuitDefinition,user:boolean){
+    if(user){
+        const response=await fetch('/api/circuits-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(circuit)});
+        const result=await response.json() as {error?:string};
+        if(!response.ok)throw new Error(result.error??'No se pudo restaurar el circuito en la base de datos.');
+    }
+    await saveCircuit(circuit);
+}
