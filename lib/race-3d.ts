@@ -157,7 +157,9 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
     let interactionMode:RaceCamera='player',splitActive=false,splitStacked=false,controlledOrbit=0;
     const orbitAt=(x:number,y:number)=>{
         const rect=canvas.getBoundingClientRect();
-        return splitActive?(splitStacked?Number(y>=rect.top+rect.height/2):Number(x>=rect.left+rect.width/2)):(interactionMode==='player-2'||interactionMode==='car-2'?1:0);
+        if(!splitActive)return interactionMode==='player-2'||interactionMode==='car-2'?1:0;
+        const inSecondViewport=splitStacked?y>=rect.top+rect.height/2:x>=rect.left+rect.width/2;
+        return inSecondViewport?0:1;
     };
     let draggingCamera = false, previousPointerX = 0, previousPointerY = 0;
     const pointerDown = (event: PointerEvent) => {
@@ -239,8 +241,8 @@ export function createRaceScene(canvas: HTMLCanvasElement, track: CircuitRuntime
         render(world:RaceWorld,mode:RaceCamera,dt:number){splitActive=false;interactionMode=mode;renderView(world,mode,dt);},
         renderSplit(world:RaceWorld,dt:number,stacked=false,firstPerson=false){
             splitActive=true;splitStacked=stacked;
-            renderView(world,firstPerson?'car-1':'player',dt,stacked?{x:0,y:.5,width:1,height:.5}:{x:0,y:0,width:.5,height:1});
-            renderView(world,firstPerson?'car-2':'player-2',dt,stacked?{x:0,y:0,width:1,height:.5}:{x:.5,y:0,width:.5,height:1});
+            renderView(world,firstPerson?'car-1':'player',dt,stacked?{x:0,y:0,width:1,height:.5}:{x:.5,y:0,width:.5,height:1});
+            renderView(world,firstPerson?'car-2':'player-2',dt,stacked?{x:0,y:.5,width:1,height:.5}:{x:0,y:0,width:.5,height:1});
         },
         dispose() {
             canvas.removeEventListener('pointerdown', pointerDown);

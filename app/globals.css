@@ -247,3 +247,17 @@ main footer { padding-bottom: 85px; }
 @media(max-width:400px){.simulator-viewport-heading>strong{font-size:10px}.simulator-viewport-heading>span{font-size:15px}.simulator-viewport-clocks span{font-size:10px}.simulator-viewport-hud{padding:8px}.simulator-viewport-clocks strong{font-size:22px}}
 
 .simulator-start-lights{position:absolute;z-index:4;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;pointer-events:none;background:#10212d38;color:white;text-shadow:0 2px 5px #000;font-size:24px;font-weight:800}.simulator-light-bar{display:flex;gap:10px;padding:16px;border:1px solid #ffffff40;border-radius:12px;background:#10151ef2;box-shadow:0 8px 30px #0005}.simulator-light-bar>span{width:clamp(26px,4vw,48px);aspect-ratio:1;border-radius:50%;background:#35212a;border:2px solid #542831}.simulator-light-bar>span.lit{background:#ff3044;border-color:#ff9aa4;box-shadow:0 0 18px #fa334570}.simulator-start-lights.is-go{background:transparent;color:#c4ffce}.simulator-start-lights.is-go .simulator-light-bar{display:none}.simulator-timed-screen .simulator-paused{z-index:5}.simulator-setup .notice{flex-basis:100%}
+
+.simulator-ranking{display:grid;gap:16px;padding:18px 22px}
+.simulator-ranking h2{font-size:18px;margin-bottom:5px}
+.simulator-ranking p,.simulator-ranking label{font-size:13px;color:var(--muted)}
+.simulator-ranking-entries,.simulator-ranking form{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.simulator-ranking form{flex:1 1 300px}
+.simulator-ranking label{display:grid;gap:6px}
+.simulator-ranking input{width:min(210px,100%);padding:8px 10px;border:1px solid var(--border);border-radius:6px}
+.simulator-ranking table{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}
+.simulator-ranking th,.simulator-ranking td{padding:8px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+
+.simulator-demonstration{width:min(100%,1440px);margin-inline:auto;padding:clamp(16px,4vw,48px)}
+.simulator-demonstration>.page-heading{margin-bottom:20px;gap:16px;flex-wrap:wrap}
+.simulator-demonstration>.page-heading a,.sidebar .nav-item[href="/demostracion"]{text-decoration:none}

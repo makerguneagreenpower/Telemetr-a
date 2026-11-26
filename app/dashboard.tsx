@@ -99,6 +99,7 @@ export default function Dashboard({ user, initialView = 'inicio' }: { user: { na
                 {nav.map(n => <button key={n.id} aria-label={n.label} title={n.label} className={'nav-item ' + (view === n.id || (n.id === 'coche' && parts.some(p => p.id === view)) ? 'active' : '')} onClick={() => setView(n.id)}>
                     <n.icon size={19} />{n.label}{(view === n.id || (n.id === 'coche' && parts.some(p => p.id === view))) && <span className="nav-mark" />}
                 </button>)}
+                <a href="/demostracion" className="nav-item"><Flag size={19} />Demostración</a>
             </nav>
             <div className="sidebar-session">
                 <span className="small-label">COCHE DEL EQUIPO</span>
