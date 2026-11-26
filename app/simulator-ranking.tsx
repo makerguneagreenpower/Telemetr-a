@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import type { CircuitRuntime } from '../lib/circuits';
-import type { RaceVehicle } from '../lib/race-engine';
 
 type Result = { name: string; seconds: number };
 
@@ -20,17 +19,15 @@ function formatTime(seconds: number) {
     return `${Math.floor(hundredths / 6000)}:${((hundredths % 6000) / 100).toFixed(2).padStart(5, '0')}`;
 }
 
-export function SimulatorRanking({ track, cars }: { track: CircuitRuntime; cars: RaceVehicle[] }) {
+export function useSimulatorRanking(track: CircuitRuntime) {
     const key = `greenpower.simulator.ranking.v1:${JSON.stringify([track.id, track.revision])}`;
-    const [names, setNames] = useState(['', '']);
-    const [results, setResults] = useState<Result[]>([]);
-    const [message, setMessage] = useState('');
+    const [snapshot, setSnapshot] = useState<{ key: string; results: Result[] }>({ key, results: [] });
     const [error, setError] = useState('');
 
     useEffect(() => {
         function refresh() {
             try {
-                setResults(readResults(key));
+                setSnapshot({ key, results: readResults(key) });
                 setError('');
             } catch {
                 setError('No se pudo leer el ranking guardado en este navegador.');
@@ -44,59 +41,44 @@ export function SimulatorRanking({ track, cars }: { track: CircuitRuntime; cars:
         return () => window.removeEventListener('storage', sync);
     }, [key]);
 
-    function save(index: number) {
-        const name = names[index].trim();
-        const seconds = cars[index].bestLap;
-        if (!name || seconds === null || !Number.isFinite(seconds) || seconds <= 0) return;
-
+    function save(names: string[], laps: readonly (number | null)[]) {
         try {
-            const updated = readResults(key);
-            const identity = name.toLocaleLowerCase('es');
-            const existing = updated.findIndex(row => row.name.toLocaleLowerCase('es') === identity);
-            if (existing < 0) updated.push({ name, seconds });
-            else if (seconds < updated[existing].seconds) updated[existing] = { name, seconds };
-            else {
-                setResults(updated);
-                setError('');
-                setMessage(`${name} ya tiene un tiempo igual o mejor.`);
-                return;
-            }
-            localStorage.setItem(key, JSON.stringify(updated));
-            setResults(updated);
+            const results = readResults(key);
+            let improved = false;
+            names.forEach((name, index) => {
+                const seconds = laps[index];
+                if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return;
+                const existing = results.findIndex(row => pilotIdentity(row.name) === pilotIdentity(name));
+                if (existing < 0) results.push({ name, seconds });
+                else if (seconds < results[existing].seconds) results[existing] = { name, seconds };
+                else return;
+                improved = true;
+            });
+            if (improved) localStorage.setItem(key, JSON.stringify(results));
+            setSnapshot({ key, results });
             setError('');
-            setMessage(`Vuelta de ${name} guardada en ${formatTime(seconds)}.`);
         } catch {
-            setMessage('');
             setError('No se pudo guardar el tiempo en este navegador.');
         }
     }
 
+    return { results: snapshot.key === key ? snapshot.results : [], error, save };
+}
+
+export function pilotIdentity(name: string) {
+    return name.trim().normalize('NFC').toLocaleLowerCase('es');
+}
+
+export function SimulatorRanking({ track, results, error }: { track: CircuitRuntime; results: Result[]; error: string }) {
     const standings = [...results].sort((a, b) => a.seconds - b.seconds || a.name.localeCompare(b.name, 'es'));
 
     return (
         <section className="panel simulator-ranking" aria-labelledby="simulator-ranking-title">
             <div>
                 <h2 id="simulator-ranking-title">Ranking de vueltas · {track.name}</h2>
-                <p>Guarda la mejor vuelta válida de cada participante. Reinicia la carrera antes de cambiar de pilotos. El ranking se guarda en este navegador por circuito.</p>
-            </div>
-            <div className="simulator-ranking-entries">
-                {cars.map((car, index) => (
-                    <form key={car.id} onSubmit={event => { event.preventDefault(); save(index); }}>
-                        <label>
-                            Nombre de J{index + 1}
-                            <input value={names[index]} maxLength={60} onChange={event => {
-                                const name = event.target.value;
-                                setNames(current => current.map((value, slot) => slot === index ? name : value));
-                            }} />
-                        </label>
-                        <button type="submit" className="secondary" disabled={!names[index].trim() || car.bestLap === null}>
-                            Guardar J{index + 1}{car.bestLap === null ? '' : ` · ${formatTime(car.bestLap)}`}
-                        </button>
-                    </form>
-                ))}
+                <p>La mejor vuelta válida de cada participante se guarda automáticamente en este navegador por circuito.</p>
             </div>
             {error && <p role="alert">{error}</p>}
-            {message && <p role="status">{message}</p>}
             {standings.length ? (
                 <table aria-label="Clasificación por mejor vuelta">
                     <thead><tr><th scope="col">Puesto</th><th scope="col">Participante</th><th scope="col">Mejor vuelta</th></tr></thead>

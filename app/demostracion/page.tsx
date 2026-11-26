@@ -11,7 +11,7 @@ export default function Page() {
             <header className="page-heading">
                 <div>
                     <h1>Competición del simulador</h1>
-                    <p>Consigue tu mejor vuelta válida y guárdala en la clasificación.</p>
+                    <p>Inscríbete y consigue tu mejor vuelta válida para la clasificación.</p>
                 </div>
                 <a href="/" className="secondary">Volver a la web del equipo</a>
             </header>

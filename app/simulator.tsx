@@ -8,7 +8,6 @@ import { createPlayerGapTracker, type PlayerGap } from '../lib/simulator-timing'
 import type { RaceCamera } from '../lib/race-3d';
 import { deleteSavedCircuit, restoreSavedCircuit, setActiveCircuit } from '../lib/circuit-storage';
 import { useCircuits } from './use-circuits';
-import { SimulatorRanking } from './simulator-ranking';
 import { START_LIGHT_SECONDS, advanceStartLights, startLightCount } from '../lib/simulator-start';
 
 type ControlMode='keyboard'|'wheel';
@@ -55,7 +54,7 @@ export default function Simulator({onManageCircuits,user=false}:{onManageCircuit
     </div>;
 }
 
-export function PlayerRace({track,players,showRanking=false}:{track:CircuitRuntime;players:1|2;showRanking?:boolean}){
+export function PlayerRace({track,players,onBestLaps}:{track:CircuitRuntime;players:1|2;onBestLaps?:(laps:readonly (number|null)[])=>void}){
     const canvas=useRef<HTMLCanvasElement>(null),stage=useRef<HTMLElement>(null);
     const [world,setWorld]=useState(()=>createPlayerWorld(track)),worldRef=useRef(world);
     const keys=useRef(new Set<string>()),gapTracker=useRef(createPlayerGapTracker());
@@ -64,8 +63,8 @@ export function PlayerRace({track,players,showRanking=false}:{track:CircuitRunti
     const [mode,setMode]=useState<ControlMode>('keyboard'),[running,setRunning]=useState(true),[inverted,setInverted]=useState(false);
     const [camera,setCamera]=useState<SimulatorView>(players===2?'split':'player');
     const [wheelName,setWheelName]=useState<string|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),[ready,setReady]=useState(false),[fullscreen,setFullscreen]=useState(false),[fullscreenError,setFullscreenError]=useState('');
-    const settings=useRef({mode,running,inverted,camera,gears});
-    useEffect(()=>{settings.current={mode,running,inverted,camera,gears};},[mode,running,inverted,camera,gears]);
+    const settings=useRef({mode,running,inverted,camera,gears,onBestLaps});
+    useEffect(()=>{settings.current={mode,running,inverted,camera,gears,onBestLaps};},[mode,running,inverted,camera,gears,onBestLaps]);
     useEffect(()=>{const changed=()=>setFullscreen(document.fullscreenElement===stage.current);document.addEventListener('fullscreenchange',changed);return()=>document.removeEventListener('fullscreenchange',changed);},[]);
 
     useEffect(()=>{
@@ -110,7 +109,12 @@ export function PlayerRace({track,players,showRanking=false}:{track:CircuitRunti
                     while(accumulator>=FIXED_STEP){
                         const first=options.mode==='wheel'?readWheelInput(options.inverted).input:keyboardDrivingInput(keys.current,'arrows');
                         const second=keyboardDrivingInput(keys.current,'wasd');
+                        const previousCars=worldRef.current.cars;
                         worldRef.current=stepPlayerWorld(worldRef.current,[{...first,gear:options.gears[0]},{...second,gear:options.gears[1]}],FIXED_STEP,track,{players,resetAtTrackEdge:true});accumulator-=FIXED_STEP;
+                        const cars=worldRef.current.cars;
+                        if(options.onBestLaps&&cars.some((car,index)=>car.bestLap!==previousCars[index].bestLap)){
+                            options.onBestLaps(cars.map(car=>car.bestLap));
+                        }
                     }
                 }else accumulator=0;
                 if(now-published>=80){setCountdown(countdownRef.current);setWorld(worldRef.current);setGap(players===2?gapTracker.current.record(worldRef.current):null);if(options.mode==='wheel')setWheelName(readWheelInput(options.inverted).name);published=now;}
@@ -150,7 +154,6 @@ export function PlayerRace({track,players,showRanking=false}:{track:CircuitRunti
             <div className="simulator-dashboard"><div className="simulator-controls"><div className="simulator-control-modes" role="group" aria-label="Control del jugador 1"><button type="button" aria-pressed={mode==='keyboard'} className={mode==='keyboard'?'selected':''} onClick={()=>chooseControl('keyboard')}><Keyboard size={16}/>J1 · Flechas</button><button type="button" aria-pressed={mode==='wheel'} className={mode==='wheel'?'selected':''} onClick={()=>chooseControl('wheel')}><Gamepad2 size={16}/>J1 · Volante / Gamepad</button></div>{mode==='wheel'&&<div className="simulator-wheel-settings"><p>{wheelName?`Detectado: ${wheelName}`:'Conecta el volante y pulsa un botón para detectarlo.'}</p><label><input type="checkbox" checked={inverted} onChange={e=>setInverted(e.target.checked)}/>Invertir eje del volante</label></div>}<p className="simulator-control-hint">J1: flechas · E cambia D/R · R recoloca.{players===2&&' J2: WASD · Q cambia D/R · F recoloca.'}<span>Selecciona R y acelera para retroceder. ↓ / S frenan en ambas marchas. Las cuatro ruedas fuera del margen: parada de 2 s y recolocación individual.</span></p></div></div>
         </section>
         <div className={`simulator-player-panels${players===1?' single-player':''}`}>{activeCars.map((car,index)=><PlayerPanel key={car.id} car={car} index={index as 0|1} elapsed={world.elapsed} gear={gears[index]} chooseGear={gear=>chooseGear(index as 0|1,gear)} recover={()=>recover(index as 0|1)}/>)}</div>
-        {showRanking&&<SimulatorRanking track={track} cars={activeCars}/>}
         <p className="race-media-note">Se permite pisar el piano: las cuatro ruedas deben superar el borde del asfalto más 1 m para recibir una parada de 2 segundos antes de recolocar ese coche. La vuelta queda anulada. El mejor tiempo anterior se conserva. La diferencia de tiempo compara el paso por el mismo punto y aparece cuando hay una referencia válida. 35 km/h en llano y marcha atrás hasta 8 km/h.</p>
     </>;
 }
